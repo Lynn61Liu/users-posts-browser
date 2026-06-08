@@ -369,7 +369,7 @@ The recommended order is:
 - the message makes it clear that no update was needed
 - the message appears after the sync finishes
 
-### Card 6.4: Add error feedback
+### Card 6.3: Add no-change feedback
 
 **Goal:** Show a clear error state when sync or save fails.
 
