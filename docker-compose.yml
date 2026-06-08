@@ -31,6 +31,7 @@ services:
       DB_NAME: ${DB_NAME:-users_posts_browser}
       DB_USERNAME: ${DB_USERNAME:-users_posts_browser}
       DB_PASSWORD: ${DB_PASSWORD:-users_posts_browser}
+      APP_DEV_RESET_ENABLED: ${APP_DEV_RESET_ENABLED:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,6 +41,8 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        VITE_ENABLE_DEV_TOOLS: ${VITE_ENABLE_DEV_TOOLS:-false}
     container_name: users-posts-browser-frontend
     depends_on:
       - backend

@@ -28,6 +28,9 @@ docker compose up --build
 - Copy `.env.example` to `.env` if you want to customize local values.
 - The backend reads `DB_*` and `SERVER_PORT`.
 - The frontend is ready for `VITE_*` variables in future feature work.
+- Optional dev-only reset tooling:
+  - set `APP_DEV_RESET_ENABLED=true` to expose `POST /api/dev/reset`
+  - set `VITE_ENABLE_DEV_TOOLS=true` to show the reset button in the frontend
 
 ## Project Layout
 

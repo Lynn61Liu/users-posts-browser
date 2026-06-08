@@ -6,6 +6,7 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+ARG VITE_ENABLE_DEV_TOOLS=false
 RUN npm run build
 
 FROM nginx:1.27-alpine
