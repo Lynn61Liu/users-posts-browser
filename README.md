@@ -9,6 +9,14 @@ Monorepo scaffold for the JSONPlaceholder users/posts browser.
 - Database: PostgreSQL
 - Runtime: Docker Compose
 
+## Project Docs
+
+If you want to understand the implementation approach while setting up the system, read these documents in order:
+
+1. [Project Summary and Reflection](./Project_Summary_and_Reflection.md) - my implementation story, design decisions, and reflection
+2. [Solution Design](./MySolution.MD) - the original solution plan and architecture
+3. [Epic Test Cases](./epic-test-cases.md) - the epic-by-epic test case checklist used during development
+
 ## Quick Start
 
 1. Make sure Docker is running.
@@ -46,6 +54,15 @@ docker compose up --build
   - open http://localhost:3000
   - trigger sync from the header button
   - optionally inspect PostgreSQL data after sync
+
+## Development Flow
+
+If you want to follow the same development path used in this project, start with the test cases and then move through the epics in order:
+
+1. Read [Epic Test Cases](./epic-test-cases.md) to understand the expected behavior.
+2. Read [Project Summary and Reflection](./Project_Summary_and_Reflection.md) to understand the solution thinking.
+3. Use [MySolution.MD](./MySolution.MD) as the detailed design reference.
+4. Then run the system using the Quick Start steps above and verify each epic as you go.
 
 ## Environment
 
