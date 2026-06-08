@@ -1,0 +1,23 @@
+create table users (
+    id bigserial primary key,
+    external_id bigint not null,
+    raw_source_id bigint not null,
+    name varchar(255) not null,
+    username varchar(255) not null,
+    email varchar(255) not null,
+    phone varchar(100),
+    website varchar(255),
+    address_street varchar(255),
+    address_suite varchar(255),
+    address_city varchar(255),
+    address_zipcode varchar(50),
+    address_geo_lat varchar(50),
+    address_geo_lng varchar(50),
+    company_name varchar(255),
+    company_catch_phrase varchar(255),
+    company_bs varchar(255),
+    created_at timestamp not null,
+    updated_at timestamp not null,
+    constraint uq_users_external_id unique (external_id),
+    constraint fk_users_raw_source foreign key (raw_source_id) references raw_source (id)
+);
