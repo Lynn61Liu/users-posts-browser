@@ -5,6 +5,7 @@ import { ApiError, fetchUser, fetchUserPosts, fetchUsers, type UserDetail, type 
 import { UserListPanel } from './components/users/UserListPanel'
 import { UserDetailPanel } from './components/users/UserDetailPanel'
 import type { SyncStatusTone } from './components/layout/AppHeader'
+import { reloadCurrentPage } from './browser'
 
 type AppEnv = {
   VITE_ENABLE_DEV_TOOLS?: string
@@ -261,6 +262,7 @@ function App({
       setResetStatus(
         payload.message ?? 'Development database reset successfully.',
       )
+      reloadCurrentPage()
     } catch {
       setResetStatus('Reset failed. Check the backend logs and try again.')
     } finally {

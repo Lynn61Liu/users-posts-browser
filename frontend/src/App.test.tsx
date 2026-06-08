@@ -11,6 +11,7 @@ import {
 } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import * as BrowserActions from './browser'
 
 type JsonResponseInit = {
   status?: number
@@ -504,6 +505,10 @@ describe('Dev reset tool', () => {
   })
 
   it('shows the reset button when dev tools are enabled and calls the backend reset endpoint', async () => {
+    const reloadSpy = vi
+      .spyOn(BrowserActions, 'reloadCurrentPage')
+      .mockImplementation(vi.fn())
+
     const fetchMock = vi.fn(async (input) => {
       if (input === '/api/users') {
         return jsonResponse([])
@@ -544,5 +549,50 @@ describe('Dev reset tool', () => {
     expect(
       screen.getByText(/development database reset successfully/i),
     ).toBeTruthy()
+    expect(reloadSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('reloads the page after a successful reset', async () => {
+    const reloadMock = vi.fn()
+    const reloadSpy = vi
+      .spyOn(BrowserActions, 'reloadCurrentPage')
+      .mockImplementation(reloadMock)
+
+    const fetchMock = vi.fn(async (input) => {
+      if (input === '/api/users') {
+        return jsonResponse([])
+      }
+
+      if (input === '/api/dev/reset') {
+        return jsonResponse({
+          status: 'success',
+          message: 'Development database reset successfully.',
+        })
+      }
+
+      return new Response('', { status: 404 })
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <App
+        env={{
+          VITE_ENABLE_DEV_TOOLS: 'true',
+        }}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(/no users imported yet/i)).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /reset database/i }))
+
+    await waitFor(() => {
+      expect(reloadMock).toHaveBeenCalledTimes(1)
+    })
+
+    reloadSpy.mockRestore()
   })
 })
