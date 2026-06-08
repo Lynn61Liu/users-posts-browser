@@ -55,8 +55,21 @@ public class SyncService {
 			return result == null ? SyncResult.error("Sync did not return a result") : result;
 		}
 		catch (Exception ex) {
-			return SyncResult.error(ex.getMessage());
+			return SyncResult.error(resolveErrorMessage(ex));
 		}
+	}
+
+	static String resolveErrorMessage(Throwable throwable) {
+		if (isDatabaseUnavailable(throwable)) {
+			return "Could not reach PostgreSQL. Make sure the database is running, then try again.";
+		}
+
+		String message = firstMeaningfulMessage(throwable);
+		if (message == null || message.isBlank()) {
+			return "Sync failed. Check the backend logs and try again.";
+		}
+
+		return message;
 	}
 
 	private SyncResult syncWithinTransaction(List<JsonPlaceholderUserDto> users, List<JsonPlaceholderPostDto> posts) {
@@ -153,5 +166,45 @@ public class SyncService {
 
 	private String pluralSuffix(int count) {
 		return count == 1 ? "" : "s";
+	}
+
+	private static boolean isDatabaseUnavailable(Throwable throwable) {
+		Throwable current = throwable;
+		while (current != null) {
+			String message = normalize(current.getMessage());
+			String type = current.getClass().getSimpleName().toLowerCase();
+
+			if (message.contains("could not open jpa entitymanager for transaction")
+				|| message.contains("failed to obtain jdbc connection")
+				|| message.contains("unable to acquire jdbc connection")
+				|| message.contains("connection refused")
+				|| message.contains("connection is not available")
+				|| message.contains("communications link failure")
+				|| message.contains("connection timed out")
+				|| type.contains("cannotgetjdbcconnectionexception")
+				|| type.contains("sqltransientconnectionexception")) {
+				return true;
+			}
+
+			current = current.getCause();
+		}
+
+		return false;
+	}
+
+	private static String firstMeaningfulMessage(Throwable throwable) {
+		Throwable current = throwable;
+		while (current != null) {
+			String message = current.getMessage();
+			if (message != null && !message.isBlank()) {
+				return message;
+			}
+			current = current.getCause();
+		}
+		return null;
+	}
+
+	private static String normalize(String value) {
+		return value == null ? "" : value.toLowerCase();
 	}
 }

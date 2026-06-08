@@ -281,7 +281,7 @@ describe('Epic 5: UI pages', () => {
     expect(screen.getByText(/select a user to inspect details/i)).toBeTruthy()
   })
 
-  it('TC-5.5: shows list errors when the users request fails', async () => {
+  it('TC-5.5: shows backend 500 errors when the users request fails', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       new Response('', {
         status: 500,
@@ -293,7 +293,38 @@ describe('Epic 5: UI pages', () => {
     render(<App />)
 
     await waitFor(() => {
-      expect(screen.getByText(/could not load users/i)).toBeTruthy()
+      expect(screen.getAllByText(/^backend returned 500$/i).length).toBeGreaterThan(1)
+    })
+  })
+
+  it('TC-5.6: shows network errors when the users request cannot reach the backend', async () => {
+    const fetchMock = vi.fn().mockRejectedValueOnce(new Error('Failed to fetch'))
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/^network error$/i).length).toBeGreaterThan(1)
+    })
+  })
+
+  it('TC-5.7: shows data fetch errors when the response cannot be parsed', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response('not-json', {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/^data fetch error$/i).length).toBeGreaterThan(1)
     })
   })
 })

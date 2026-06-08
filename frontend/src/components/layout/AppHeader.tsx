@@ -16,6 +16,10 @@ type AppHeaderProps = {
   statusKind: SyncStatusTone
   onSync: () => void
   isSyncing?: boolean
+  devToolsEnabled?: boolean
+  onResetDatabase?: () => void
+  isResetting?: boolean
+  resetStatus?: string | null
 }
 
 const statusToneClasses: Record<SyncStatusTone, string> = {
@@ -33,6 +37,10 @@ export function AppHeader({
   statusKind,
   onSync,
   isSyncing = false,
+  devToolsEnabled = false,
+  onResetDatabase,
+  isResetting = false,
+  resetStatus = null,
 }: AppHeaderProps) {
   return (
     <header className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -50,21 +58,50 @@ export function AppHeader({
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div
-          className={cn(
-            'flex max-w-[780px] flex-wrap items-center gap-2 rounded-2xl border px-4 py-3 text-sm shadow-sm',
-            statusToneClasses[statusKind],
-          )}
-        >
-          <span className="h-2.5 w-2.5 rounded-full bg-current" />
-          <span className="font-medium">{syncStatusLabel}</span>
-          <span className="text-current/75">{syncDescription}</span>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div
+            className={cn(
+              'flex max-w-[780px] flex-wrap items-center gap-2 rounded-2xl border px-4 py-3 text-sm shadow-sm',
+              statusToneClasses[statusKind],
+            )}
+          >
+            <span className="h-2.5 w-2.5 rounded-full bg-current" />
+            <span className="font-medium">{syncStatusLabel}</span>
+            <span className="text-current/75">{syncDescription}</span>
+          </div>
+          <Button variant="primary" onClick={onSync} disabled={isSyncing}>
+            <RefreshIcon className={cn('h-4 w-4', isSyncing && 'animate-spin')} />
+            {isSyncing ? 'Syncing' : 'Sync Data'}
+          </Button>
         </div>
-        <Button variant="primary" onClick={onSync} disabled={isSyncing}>
-          <RefreshIcon className={cn('h-4 w-4', isSyncing && 'animate-spin')} />
-          {isSyncing ? 'Syncing' : 'Sync Data'}
-        </Button>
+
+        {devToolsEnabled && onResetDatabase ? (
+          <div className="flex flex-col gap-3 rounded-2xl border border-rose-200 bg-rose-50/80 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-700">
+                Development tools
+              </p>
+              <p className="mt-1 text-sm text-rose-900/80">
+                Reset local data before a CES demo or a clean sync run.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              {resetStatus ? (
+                <p className="text-sm font-medium text-rose-700">{resetStatus}</p>
+              ) : null}
+              <Button
+                variant="secondary"
+                className="border-rose-200 bg-white text-rose-700 hover:border-rose-300 hover:bg-rose-50"
+                onClick={onResetDatabase}
+                disabled={isResetting}
+              >
+                {isResetting ? 'Resetting...' : 'Reset database'}
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </header>
   )

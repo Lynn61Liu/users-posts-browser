@@ -1,16 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AppHeader } from './components/layout/AppHeader'
-import { Button } from './components/ui/Button'
-import { Surface } from './components/ui/Surface'
 import { resolveDevToolsEnabled } from './env'
-import {
-  fetchUser,
-  fetchUserPosts,
-  fetchUsers,
-  type UserDetail,
-  type UserPost,
-  type UserSummary,
-} from './usersApi'
+import { ApiError, fetchUser, fetchUserPosts, fetchUsers, type UserDetail, type UserPost, type UserSummary } from './usersApi'
 import { UserListPanel } from './components/users/UserListPanel'
 import { UserDetailPanel } from './components/users/UserDetailPanel'
 import type { SyncStatusTone } from './components/layout/AppHeader'
@@ -28,6 +19,11 @@ type DetailLoadState = 'idle' | 'loading' | 'ready' | 'empty' | 'error'
 type SyncMessage = {
   kind: SyncStatusTone
   label: string
+  detail: string
+}
+
+type FetchFailureMessage = {
+  title: string
   detail: string
 }
 
@@ -53,14 +49,57 @@ function App({
   const [resetStatus, setResetStatus] = useState<string | null>(null)
   const [isResetting, setIsResetting] = useState(false)
   const [dataVersion, setDataVersion] = useState(0)
+  const [usersLoadError, setUsersLoadError] = useState<FetchFailureMessage | null>(null)
+  const [detailLoadError, setDetailLoadError] = useState<FetchFailureMessage | null>(null)
 
   const visibleUsers = users.slice(0, 10)
+
+  function setDataFetchError(error: FetchFailureMessage) {
+    setSyncMessage({
+      kind: 'error',
+      label: error.title,
+      detail: error.detail,
+    })
+  }
+
+  function classifyFetchFailure(
+    error: unknown,
+    subject: string,
+  ): FetchFailureMessage {
+    if (error instanceof ApiError) {
+      if (error.kind === 'network') {
+        return {
+          title: 'Network error',
+          detail: `Could not reach the backend while loading ${subject}. Check your connection and try again.`,
+        }
+      }
+
+      if (error.kind === 'http') {
+        const status = error.status ?? 500
+        return {
+          title: status === 500 ? 'Backend returned 500' : `Backend returned ${status}`,
+          detail: `The backend returned ${status} while loading ${subject}. Try again or check the backend logs.`,
+        }
+      }
+
+      return {
+        title: 'Data fetch error',
+        detail: `The backend response could not be parsed while loading ${subject}. Try again or check the backend logs.`,
+      }
+    }
+
+    return {
+      title: 'Data fetch error',
+      detail: `Could not load ${subject} from the backend.`,
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
 
     async function loadUsers() {
       setUsersLoadState('loading')
+      setUsersLoadError(null)
 
       try {
         const importedUsers = await fetchUsers()
@@ -86,7 +125,7 @@ function App({
             ? current
             : importedUsers[0].id,
         )
-      } catch {
+      } catch (error) {
         if (cancelled) {
           return
         }
@@ -96,6 +135,9 @@ function App({
         setSelectedUser(null)
         setSelectedUserPosts([])
         setDetailState('empty')
+        const failure = classifyFetchFailure(error, 'the users list')
+        setUsersLoadError(failure)
+        setDataFetchError(failure)
       }
     }
 
@@ -130,8 +172,9 @@ function App({
         setSelectedUser(user)
         setSelectedUserPosts(posts)
         setDetailState('ready')
+        setDetailLoadError(null)
         setPostPage(1)
-      } catch {
+      } catch (error) {
         if (cancelled) {
           return
         }
@@ -139,6 +182,9 @@ function App({
         setSelectedUser(null)
         setSelectedUserPosts([])
         setDetailState('error')
+        const failure = classifyFetchFailure(error, 'the selected user')
+        setDetailLoadError(failure)
+        setDataFetchError(failure)
       }
     }
 
@@ -227,6 +273,7 @@ function App({
     setSelectedUser(null)
     setSelectedUserPosts([])
     setDetailState('loading')
+    setDetailLoadError(null)
     setPostPage(1)
   }
 
@@ -236,32 +283,43 @@ function App({
 
   return (
     <main className="app-shell flex min-h-screen flex-col">
-        <AppHeader
-          syncStatusLabel={syncStatusLabel}
-          syncDescription={syncDescription}
-          statusKind={syncMessage.kind}
-          onSync={handleSync}
-          isSyncing={isSyncing}
-        />
+      <AppHeader
+        syncStatusLabel={syncStatusLabel}
+        syncDescription={syncDescription}
+        statusKind={syncMessage.kind}
+        onSync={handleSync}
+        isSyncing={isSyncing}
+        devToolsEnabled={devToolsEnabled}
+        onResetDatabase={devToolsEnabled ? handleResetDatabase : undefined}
+        isResetting={isResetting}
+        resetStatus={resetStatus}
+      />
 
       <section className="mt-6 grid flex-1 min-h-0 gap-6 xl:grid-cols-[minmax(340px,440px)_minmax(0,1fr)]">
         <UserListPanel
           users={users}
           visibleUsers={visibleUsers}
           selectedUserId={selectedUserId}
-          onSelectUser={handleSelectUser}
-          isLoading={usersLoadState === 'loading'}
-          isError={usersLoadState === 'error'}
-          isEmpty={usersLoadState === 'empty'}
-        />
+        onSelectUser={handleSelectUser}
+        isLoading={usersLoadState === 'loading'}
+        isError={usersLoadState === 'error'}
+        isEmpty={usersLoadState === 'empty'}
+        errorTitle={usersLoadError?.title}
+        errorDescription={usersLoadError?.detail}
+      />
 
-        <div className="flex min-h-0 flex-1 flex-col gap-6">
+        <div
+          key={`detail-${selectedUserId ?? 'none'}`}
+          className="animate-panel-enter flex min-h-0 flex-1 flex-col gap-6"
+        >
           <UserDetailPanel
             user={selectedUser}
             posts={selectedUserPosts}
             isLoading={detailState === 'loading'}
             isError={detailState === 'error'}
             isEmpty={detailState === 'empty'}
+            errorTitle={detailLoadError?.title}
+            errorDescription={detailLoadError?.detail}
             postPage={postPage}
             onPrevPostPage={() =>
               setPostPage((page) => Math.max(1, page - 1))
@@ -277,41 +335,6 @@ function App({
           />
         </div>
       </section>
-
-  
-
-      {devToolsEnabled ? (
-        <section className="mt-6">
-          <Surface className="flex flex-col gap-4 border-emerald-200 bg-emerald-50/70">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
-                  Development tools
-                </p>
-                <h3 className="mt-2 text-lg font-semibold text-slate-900">
-                  Reset local data
-                </h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Clear `users`, `posts`, and `raw_source` so you can rerun the
-                  sync flow from a clean database.
-                </p>
-              </div>
-
-              <Button
-                variant="secondary"
-                onClick={handleResetDatabase}
-                disabled={isResetting}
-              >
-                {isResetting ? 'Resetting...' : 'Reset database'}
-              </Button>
-            </div>
-
-            {resetStatus ? (
-              <p className="text-sm font-medium text-emerald-700">{resetStatus}</p>
-            ) : null}
-          </Surface>
-        </section>
-      ) : null}
     </main>
   )
 }

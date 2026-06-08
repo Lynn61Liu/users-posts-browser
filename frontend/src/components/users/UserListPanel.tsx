@@ -14,6 +14,8 @@ type UserListPanelProps = {
   isLoading: boolean
   isError: boolean
   isEmpty: boolean
+  errorTitle?: string
+  errorDescription?: string
 }
 
 const avatarTones = [
@@ -33,6 +35,8 @@ export function UserListPanel({
   isLoading,
   isError,
   isEmpty,
+  errorTitle = 'Could not load users.',
+  errorDescription = 'Refresh the page or check the backend logs.',
 }: UserListPanelProps) {
   const selectedIndex = visibleUsers.findIndex((user) => user.id === selectedUserId)
   const selectedLabel =
@@ -59,8 +63,8 @@ export function UserListPanel({
       {isError ? (
         <StateCard
           variant="error"
-          title="Could not load users."
-          description="Refresh the page or check the backend logs."
+          title={errorTitle}
+          description={errorDescription}
         />
       ) : null}
 
@@ -86,9 +90,9 @@ export function UserListPanel({
                     type="button"
                     onClick={() => onSelectUser(user.id)}
                     className={cn(
-                      'group flex w-full items-center gap-4 rounded-2xl border bg-white px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md',
+                      'group flex w-full items-center gap-4 rounded-2xl border bg-white px-4 py-3 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md',
                       isSelected
-                        ? 'border-blue-300 bg-gradient-to-r from-blue-50 to-white ring-1 ring-blue-200'
+                        ? 'border-blue-500 bg-gradient-to-r from-blue-100 via-blue-50 to-white shadow-[0_10px_25px_rgba(37,99,235,0.12)] ring-2 ring-blue-300/60'
                         : 'border-slate-200',
                     )}
                     aria-current={isSelected ? 'true' : undefined}

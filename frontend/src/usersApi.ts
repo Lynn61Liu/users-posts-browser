@@ -39,14 +39,56 @@ export type UserPost = {
   body: string
 }
 
-async function fetchJson<T>(path: string, errorMessage: string): Promise<T> {
-  const response = await fetch(path)
+export type ApiErrorKind = 'network' | 'http' | 'parse'
 
-  if (!response.ok) {
-    throw new Error(errorMessage)
+export class ApiError extends Error {
+  readonly kind: ApiErrorKind
+  readonly status?: number
+  readonly responseBody?: string | null
+
+  constructor(
+    kind: ApiErrorKind,
+    message: string,
+    options: { status?: number; responseBody?: string | null } = {},
+  ) {
+    super(message)
+    this.name = 'ApiError'
+    this.kind = kind
+    this.status = options.status
+    this.responseBody = options.responseBody
+  }
+}
+
+async function fetchJson<T>(path: string, errorMessage: string): Promise<T> {
+  let response: Response
+
+  try {
+    response = await fetch(path)
+  } catch {
+    throw new ApiError('network', errorMessage)
   }
 
-  return (await response.json()) as T
+  if (!response.ok) {
+    throw new ApiError('http', errorMessage, {
+      status: response.status,
+      responseBody: (await readResponseBody(response)) ?? undefined,
+    })
+  }
+
+  try {
+    return (await response.json()) as T
+  } catch {
+    throw new ApiError('parse', errorMessage)
+  }
+}
+
+async function readResponseBody(response: Response): Promise<string | null> {
+  try {
+    const body = await response.text()
+    return body.trim() === '' ? null : body.trim()
+  } catch {
+    return null
+  }
 }
 
 export function fetchUsers(): Promise<UserSummary[]> {

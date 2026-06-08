@@ -57,3 +57,21 @@
     @apply mx-auto max-w-[1480px] px-4 py-6 sm:px-6 lg:px-8;
   }
 }
+
+@layer utilities {
+  @keyframes panel-enter {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-panel-enter {
+    animation: panel-enter 240ms ease-out;
+  }
+}

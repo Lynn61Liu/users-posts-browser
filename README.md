@@ -23,6 +23,30 @@ docker compose up --build
 - Backend: http://localhost:8080
 - PostgreSQL: localhost:5432
 
+## Verification
+
+- Backend tests:
+```bash
+cd backend
+./mvnw test
+```
+
+- Frontend tests and build:
+```bash
+cd frontend
+npm test
+npm run build
+```
+
+- Full stack smoke check:
+```bash
+docker compose up --build
+```
+- After the app starts:
+  - open http://localhost:3000
+  - trigger sync from the header button
+  - optionally inspect PostgreSQL data after sync
+
 ## Environment
 
 - Copy `.env.example` to `.env` if you want to customize local values.

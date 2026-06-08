@@ -18,6 +18,8 @@ type UserDetailPanelProps = {
   isLoading: boolean
   isError: boolean
   isEmpty: boolean
+  errorTitle?: string
+  errorDescription?: string
   postPage: number
   onPrevPostPage: () => void
   onNextPostPage: () => void
@@ -30,6 +32,8 @@ export function UserDetailPanel({
   isLoading,
   isError,
   isEmpty,
+  errorTitle = 'Could not load the selected user.',
+  errorDescription = 'Try selecting a different user or refresh the page.',
   postPage,
   onPrevPostPage,
   onNextPostPage,
@@ -87,8 +91,8 @@ export function UserDetailPanel({
         {isError ? (
           <StateCard
             variant="error"
-            title="Could not load the selected user."
-            description="Try selecting a different user or refresh the page."
+            title={errorTitle}
+            description={errorDescription}
           />
         ) : null}
 
