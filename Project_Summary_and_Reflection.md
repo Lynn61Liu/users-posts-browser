@@ -89,7 +89,7 @@ The main reason is that manual sync is more intuitive. It fits the scope of this
 
 - During development, complete the cards in order, and after each card is finished, perform the corresponding verification to ensure the current feature works before moving on to the next one.
 
-- [trello](https://res.cloudinary.com/dyuvwlir0/image/upload/v1780926590/Screenshot_2026-06-08_at_10.11.24_PM_ogr44t.png)
+  ![trello](https://res.cloudinary.com/dyuvwlir0/image/upload/v1780926590/Screenshot_2026-06-08_at_10.11.24_PM_ogr44t.png)
 
 ## 9. Gains and Reflection
 
