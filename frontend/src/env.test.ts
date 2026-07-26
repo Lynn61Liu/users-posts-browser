@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { resolveApiProxyTarget, resolveDevToolsEnabled } from './env'
+import {
+  resolveApiProxyTarget,
+  resolveAppVersion,
+  resolveDeployEnvironment,
+  resolveDevToolsEnabled,
+} from './env'
 
 describe('TC-1.4: frontend environment values are loaded correctly', () => {
   it('uses the local backend URL when no env override is provided', () => {
@@ -17,5 +22,16 @@ describe('TC-1.4: frontend environment values are loaded correctly', () => {
     expect(
       resolveDevToolsEnabled({ VITE_ENABLE_DEV_TOOLS: 'true' }),
     ).toBe(true)
+  })
+
+  it('resolves deployment labels for blue/green builds', () => {
+    expect(resolveAppVersion({})).toBe('Local Development')
+    expect(resolveDeployEnvironment({})).toBe('Local environment')
+    expect(
+      resolveAppVersion({ VITE_APP_VERSION: 'Version 2.0 - New Feature Deployed' }),
+    ).toBe('Version 2.0 - New Feature Deployed')
+    expect(resolveDeployEnvironment({ VITE_DEPLOY_ENV: 'Green environment' })).toBe(
+      'Green environment',
+    )
   })
 })

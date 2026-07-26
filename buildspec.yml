@@ -1,0 +1,15 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 22
+      java: corretto21
+  build:
+    commands:
+      - cd frontend
+      - npm ci
+      - npm test -- --run
+      - cd ../backend
+      - chmod +x mvnw
+      - ./mvnw test

@@ -43,6 +43,8 @@ services:
       context: ./frontend
       args:
         VITE_ENABLE_DEV_TOOLS: ${VITE_ENABLE_DEV_TOOLS:-false}
+        VITE_APP_VERSION: ${VITE_APP_VERSION:-Local Development}
+        VITE_DEPLOY_ENV: ${VITE_DEPLOY_ENV:-Local environment}
     container_name: users-posts-browser-frontend
     depends_on:
       - backend

@@ -11,6 +11,8 @@ export type SyncStatusTone =
   | 'error'
 
 type AppHeaderProps = {
+  appVersion: string
+  deployEnvironment: string
   syncStatusLabel: string
   syncDescription: string
   statusKind: SyncStatusTone
@@ -32,6 +34,8 @@ const statusToneClasses: Record<SyncStatusTone, string> = {
 }
 
 export function AppHeader({
+  appVersion,
+  deployEnvironment,
   syncStatusLabel,
   syncDescription,
   statusKind,
@@ -52,9 +56,12 @@ export function AppHeader({
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
             Users & Posts
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Browse users and their posts imported from JSONPlaceholder.
-          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-sm font-semibold text-slate-800 shadow-sm">
+              {appVersion}
+            </span>
+            <span className="text-sm text-slate-500">{deployEnvironment}</span>
+          </div>
         </div>
       </div>
 

@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { AppHeader } from './components/layout/AppHeader'
-import { resolveDevToolsEnabled } from './env'
+import {
+  resolveAppVersion,
+  resolveDeployEnvironment,
+  resolveDevToolsEnabled,
+} from './env'
 import { ApiError, fetchUser, fetchUserPosts, fetchUsers, type UserDetail, type UserPost, type UserSummary } from './usersApi'
 import { UserListPanel } from './components/users/UserListPanel'
 import { UserDetailPanel } from './components/users/UserDetailPanel'
@@ -9,6 +13,8 @@ import { reloadCurrentPage } from './browser'
 
 type AppEnv = {
   VITE_ENABLE_DEV_TOOLS?: string
+  VITE_APP_VERSION?: string
+  VITE_DEPLOY_ENV?: string
 }
 
 type AppProps = {
@@ -29,9 +35,15 @@ type FetchFailureMessage = {
 }
 
 function App({
-  env = { VITE_ENABLE_DEV_TOOLS: import.meta.env.VITE_ENABLE_DEV_TOOLS },
+  env = {
+    VITE_ENABLE_DEV_TOOLS: import.meta.env.VITE_ENABLE_DEV_TOOLS,
+    VITE_APP_VERSION: import.meta.env.VITE_APP_VERSION,
+    VITE_DEPLOY_ENV: import.meta.env.VITE_DEPLOY_ENV,
+  },
 }: AppProps) {
   const devToolsEnabled = resolveDevToolsEnabled(env)
+  const appVersion = resolveAppVersion(env)
+  const deployEnvironment = resolveDeployEnvironment(env)
   const [users, setUsers] = useState<UserSummary[]>([])
   const [usersLoadState, setUsersLoadState] =
     useState<UsersLoadState>('loading')
@@ -286,6 +298,8 @@ function App({
   return (
     <main className="app-shell flex min-h-screen flex-col">
       <AppHeader
+        appVersion={appVersion}
+        deployEnvironment={deployEnvironment}
         syncStatusLabel={syncStatusLabel}
         syncDescription={syncDescription}
         statusKind={syncMessage.kind}

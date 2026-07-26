@@ -1,0 +1,31 @@
+- main [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e12]:
+      - heading "Users & Posts" [level=1] [ref=e13]
+      - generic [ref=e14]:
+        - generic [ref=e15]: Version 2.0 - New Feature Deployed
+        - generic [ref=e16]: Green environment
+    - generic [ref=e18]:
+      - generic [ref=e19]:
+        - generic [ref=e21]: Ready to sync
+        - generic [ref=e22]: Use the sync action to import fresh data.
+      - button "Sync Data" [ref=e23]
+  - generic [ref=e27]:
+    - generic [ref=e28]:
+      - heading "Users (0)" [level=2] [ref=e31]:
+        - text: Users
+        - generic [ref=e32]: (0)
+      - generic [ref=e33]:
+        - paragraph [ref=e34]: Loading users...
+        - paragraph [ref=e35]: Fetching imported users from the backend.
+    - generic [ref=e37]:
+      - generic [ref=e40]:
+        - generic [ref=e41]: "??"
+        - heading "User details" [level=2] [ref=e44]
+      - generic [ref=e45]:
+        - heading "Posts (0)" [level=3] [ref=e48]:
+          - text: Posts
+          - generic [ref=e49]: (0)
+        - generic [ref=e52]:
+          - paragraph [ref=e53]: No related posts.
+          - paragraph [ref=e54]: This user has not any posts yet.
