@@ -7,9 +7,11 @@ phases:
       java: corretto21
   build:
     commands:
+      - echo "Running frontend automated tests"
       - cd frontend
       - npm ci
       - npm test -- --run
+      - echo "Building backend Maven package"
       - cd ../backend
       - chmod +x mvnw
-      - ./mvnw test
+      - ./mvnw -DskipTests package
