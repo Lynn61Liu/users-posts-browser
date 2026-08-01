@@ -103,3 +103,118 @@ Backend repository:
 ```
 
 Both repositories have scan on push enabled, AES256 encryption, and a lifecycle policy that keeps the most recent 10 images.
+
+## ALB Resources
+
+Step 10 has created the public load balancing layer:
+
+```text
+Frontend ALB:
+  dce042-dev-frontend-alb
+  dce042-dev-frontend-alb-1508953672.ap-southeast-2.elb.amazonaws.com
+  Listener: HTTP 80 -> dce042-dev-frontend-blue-tg
+
+Backend ALB:
+  dce042-dev-backend-alb
+  dce042-dev-backend-alb-1291356867.ap-southeast-2.elb.amazonaws.com
+  Listener: HTTP 80 -> dce042-dev-backend-blue-tg
+
+Target groups:
+  dce042-dev-frontend-blue-tg / port 80 / health check /health
+  dce042-dev-frontend-green-tg / port 80 / health check /health
+  dce042-dev-backend-blue-tg / port 8080 / health check /actuator/health
+  dce042-dev-backend-green-tg / port 8080 / health check /actuator/health
+```
+
+The target groups intentionally use `target_type = "ip"` for ECS Fargate compatibility.
+
+## ECS Resources
+
+Step 11 has created the ECS Fargate runtime layer:
+
+```text
+Cluster: dce042-dev-ecs-cluster
+
+Frontend:
+  Service: frontend-service
+  Task definition: dce042-frontend-task:1
+  Image: 345594568549.dkr.ecr.ap-southeast-2.amazonaws.com/dce042-frontend:latest
+  Log group: /ecs/dce042-frontend
+  Target group: dce042-dev-frontend-blue-tg
+
+Backend:
+  Service: backend-service
+  Task definition: dce042-backend-task:1
+  Image: 345594568549.dkr.ecr.ap-southeast-2.amazonaws.com/dce042-backend:latest
+  Log group: /ecs/dce042-backend
+  Target group: dce042-dev-backend-blue-tg
+```
+
+Both services run one Fargate task with `256` CPU and `512` MB memory. The frontend proxies `/api` requests to the backend ALB through `BACKEND_UPSTREAM`.
+
+## Data And Notification Resources
+
+Step 12 has created the storage and notification layer:
+
+```text
+S3 pipeline artifact bucket:
+  dce042-dev-pipeline-artifacts-345594568549-ap-southeast-2
+
+S3 application assets bucket:
+  dce042-dev-app-assets-345594568549-ap-southeast-2
+
+DynamoDB application table:
+  dce042-users-posts
+  billing mode: PAY_PER_REQUEST
+  point-in-time recovery: ENABLED
+
+SNS topic:
+  dce042-dev-critical-notifications
+```
+
+The existing DynamoDB table was imported into Terraform state with:
+
+```bash
+terraform import -var-file=environments/dev/terraform.tfvars module.data.aws_dynamodb_table.application dce042-users-posts
+```
+
+Apply result:
+
+```text
+10 added, 1 changed, 0 destroyed
+```
+
+## Autoscaling And Monitoring
+
+Step 13 has created ECS service autoscaling and CloudWatch CPU alarms:
+
+```text
+Scalable targets:
+  service/dce042-dev-ecs-cluster/frontend-service
+  service/dce042-dev-ecs-cluster/backend-service
+
+Capacity:
+  min: 1
+  max: 2
+
+Scaling policies:
+  dce042-dev-frontend-up
+  dce042-dev-frontend-down
+  dce042-dev-backend-up
+  dce042-dev-backend-down
+
+CloudWatch alarms:
+  dce042-dev-frontend-cpu-high
+  dce042-dev-frontend-cpu-low
+  dce042-dev-backend-cpu-high
+  dce042-dev-backend-cpu-low
+
+Notification target:
+  arn:aws:sns:ap-southeast-2:345594568549:dce042-dev-critical-notifications
+```
+
+Apply result:
+
+```text
+10 added, 0 changed, 0 destroyed
+```

@@ -23,8 +23,8 @@ phases:
       - COMMIT_SHA="${CODEBUILD_RESOLVED_SOURCE_VERSION:-local}"
       - IMAGE_TAG="${IMAGE_TAG_PREFIX}-${COMMIT_SHA:0:12}"
       - IMAGE_URI="${REPOSITORY_URI}:${IMAGE_TAG}"
-      - FRONTEND_EXECUTION_ROLE_ARN="${FRONTEND_EXECUTION_ROLE_ARN:-arn:aws:iam::${AWS_ACCOUNT_ID}:role/dce042-ecs-task-execution-role}"
-      - FRONTEND_TASK_ROLE_ARN="${FRONTEND_TASK_ROLE_ARN:-arn:aws:iam::${AWS_ACCOUNT_ID}:role/dce042-frontend-task-role}"
+      - FRONTEND_EXECUTION_ROLE_ARN="${FRONTEND_EXECUTION_ROLE_ARN:-arn:aws:iam::${AWS_ACCOUNT_ID}:role/dce042-dev-ecs-task-execution-role}"
+      - FRONTEND_TASK_ROLE_ARN="${FRONTEND_TASK_ROLE_ARN:-arn:aws:iam::${AWS_ACCOUNT_ID}:role/dce042-dev-frontend-task-role}"
       - ': "${BACKEND_ALB_DNS_NAME:?Set BACKEND_ALB_DNS_NAME to the backend ALB DNS name before running the frontend CodeBuild project}"'
       - echo "Logging in to Amazon ECR ${ECR_REGISTRY}"
       - aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"

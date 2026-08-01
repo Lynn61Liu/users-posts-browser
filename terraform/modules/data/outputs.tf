@@ -1,13 +1,16 @@
 output "module_status" {
-  description = "Data module skeleton status."
-  value       = "ready-for-s3-buckets-and-dynamodb-application-table"
+  description = "Data module status."
+  value       = "s3-buckets-and-dynamodb-application-table-ready"
 }
 
-output "planned_data_resources" {
-  description = "Planned storage resources."
+output "storage_resources" {
+  description = "Created storage resources."
   value = {
-    dynamodb_table_name       = var.dynamodb_table_name
-    artifact_bucket_prefix    = local.s3_artifact_bucket_prefix
-    application_bucket_prefix = local.s3_assets_bucket_prefix
+    artifact_bucket_name = aws_s3_bucket.pipeline_artifacts.bucket
+    artifact_bucket_arn  = aws_s3_bucket.pipeline_artifacts.arn
+    assets_bucket_name   = aws_s3_bucket.app_assets.bucket
+    assets_bucket_arn    = aws_s3_bucket.app_assets.arn
+    dynamodb_table_name  = aws_dynamodb_table.application.name
+    dynamodb_table_arn   = aws_dynamodb_table.application.arn
   }
 }

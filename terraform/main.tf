@@ -45,27 +45,47 @@ module "ecr" {
 module "alb" {
   source = "./modules/alb"
 
-  project_name = var.project_name
-  environment  = var.environment
-  common_tags  = local.common_tags
+  project_name                   = var.project_name
+  environment                    = var.environment
+  vpc_id                         = module.network.vpc_id
+  public_subnet_ids              = module.network.public_subnet_ids
+  frontend_alb_security_group_id = module.security.security_group_ids.frontend_alb
+  backend_alb_security_group_id  = module.security.security_group_ids.backend_alb
+  common_tags                    = local.common_tags
 }
 
 module "ecs" {
   source = "./modules/ecs"
 
-  project_name        = var.project_name
-  environment         = var.environment
-  aws_region          = var.aws_region
-  dynamodb_table_name = var.dynamodb_table_name
-  common_tags         = local.common_tags
+  project_name                   = var.project_name
+  environment                    = var.environment
+  aws_region                     = var.aws_region
+  dynamodb_table_name            = var.dynamodb_table_name
+  public_subnet_ids              = module.network.public_subnet_ids
+  frontend_ecs_security_group_id = module.security.security_group_ids.frontend_ecs
+  backend_ecs_security_group_id  = module.security.security_group_ids.backend_ecs
+  frontend_image_uri             = "${module.ecr.repository_urls.frontend}:latest"
+  backend_image_uri              = "${module.ecr.repository_urls.backend}:latest"
+  ecs_task_execution_role_arn    = module.security.iam_role_arns.ecs_task_execution
+  frontend_task_role_arn         = module.security.iam_role_arns.frontend_task
+  backend_task_role_arn          = module.security.iam_role_arns.backend_task
+  frontend_blue_target_group_arn = module.alb.target_group_arns.frontend_blue
+  backend_blue_target_group_arn  = module.alb.target_group_arns.backend_blue
+  frontend_listener_arn          = module.alb.listener_arns.frontend
+  backend_listener_arn           = module.alb.listener_arns.backend
+  backend_alb_dns_name           = module.alb.alb_dns_names.backend
+  common_tags                    = local.common_tags
 }
 
 module "autoscaling" {
   source = "./modules/autoscaling"
 
-  project_name = var.project_name
-  environment  = var.environment
-  common_tags  = local.common_tags
+  project_name  = var.project_name
+  environment   = var.environment
+  cluster_name  = module.ecs.cluster_name
+  service_names = module.ecs.service_names
+  sns_topic_arn = module.monitoring.notification_resources.sns_topic_arn
+  common_tags   = local.common_tags
 }
 
 module "data" {
@@ -73,6 +93,7 @@ module "data" {
 
   project_name        = var.project_name
   environment         = var.environment
+  aws_region          = var.aws_region
   dynamodb_table_name = var.dynamodb_table_name
   common_tags         = local.common_tags
 }

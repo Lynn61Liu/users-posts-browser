@@ -342,12 +342,15 @@ Amazon ECS with Fargate is used to run containerized services without managing s
 
 ECS resources:
 
-- One ECS cluster
-- Two task definitions
-- Two ECS services
-- CloudWatch log groups for container logs
-- ECS task execution role
-- ECS task role
+- One ECS cluster: `dce042-dev-ecs-cluster`
+- Frontend task definition: `dce042-frontend-task:1`
+- Backend task definition: `dce042-backend-task:1`
+- Frontend ECS service: `frontend-service`
+- Backend ECS service: `backend-service`
+- CloudWatch log groups: `/ecs/dce042-frontend`, `/ecs/dce042-backend`
+- ECS task execution role: `dce042-dev-ecs-task-execution-role`
+- Frontend task role: `dce042-dev-frontend-task-role`
+- Backend task role: `dce042-dev-backend-task-role`
 
 Task sizing:
 
@@ -365,6 +368,8 @@ frontend-service:
   container name: frontend
   container port: 80
   health check path: /health
+  image: 345594568549.dkr.ecr.ap-southeast-2.amazonaws.com/dce042-frontend:latest
+  environment: BACKEND_UPSTREAM=dce042-dev-backend-alb-1291356867.ap-southeast-2.elb.amazonaws.com
   ALB: frontend-alb
   target groups: frontend-blue-tg / frontend-green-tg
 
@@ -374,8 +379,22 @@ backend-service:
   container name: backend
   container port: 8080
   health check path: /actuator/health
+  image: 345594568549.dkr.ecr.ap-southeast-2.amazonaws.com/dce042-backend:latest
+  environment: APP_DYNAMODB_ENABLED=true, DYNAMODB_TABLE_NAME=dce042-users-posts
   ALB: backend-alb
   target groups: backend-blue-tg / backend-green-tg
+```
+
+Runtime validation:
+
+```text
+frontend-service: desired 1, running 1, steady state
+backend-service: desired 1, running 1, steady state
+frontend blue target group: healthy
+backend blue target group: healthy
+frontend /health: HTTP 200 OK
+backend /actuator/health: HTTP 200 OK, status UP
+frontend /api/users: HTTP 200 OK, returns users through Nginx proxy
 ```
 
 ### Screenshot Placeholders
@@ -399,6 +418,10 @@ backend-service:
 **Figure 21: CloudWatch container logs**
 
 `[Insert screenshot: log groups or log stream output]`
+
+**Figure 22: ALB target groups with healthy ECS targets**
+
+`[Insert screenshot: frontend/backend blue target groups showing healthy registered targets]`
 
 ---
 
@@ -451,31 +474,41 @@ Two public Application Load Balancers are used, one for each service. Each ALB f
 
 ALB resources:
 
-- `frontend-alb`
-- `backend-alb`
-- `frontend-blue-tg` and `frontend-green-tg`
-- `backend-blue-tg` and `backend-green-tg`
-- HTTP listener
-- Optional HTTPS listener
-- Health checks
+- Frontend ALB: `dce042-dev-frontend-alb`
+  `dce042-dev-frontend-alb-1508953672.ap-southeast-2.elb.amazonaws.com`
+- Backend ALB: `dce042-dev-backend-alb`
+  `dce042-dev-backend-alb-1291356867.ap-southeast-2.elb.amazonaws.com`
+- Frontend blue/green target groups:
+  `dce042-dev-frontend-blue-tg`, `dce042-dev-frontend-green-tg`
+- Backend blue/green target groups:
+  `dce042-dev-backend-blue-tg`, `dce042-dev-backend-green-tg`
+- HTTP listener 80 for each ALB
+- Frontend health check path: `/health`
+- Backend health check path: `/actuator/health`
+
+The listeners initially forward traffic to the blue target groups. The green target groups are reserved for CodeDeploy blue/green deployments. The target group type is `ip`, which is required for ECS Fargate tasks.
 
 ### Screenshot Placeholders
 
-**Figure 25: Frontend ALB**
+**Figure 27: Frontend ALB**
 
 `[Insert screenshot: frontend ALB overview]`
 
-**Figure 26: Backend ALB**
+**Figure 28: Backend ALB**
 
 `[Insert screenshot: backend ALB overview]`
 
-**Figure 27: ALB listeners**
+**Figure 29: ALB listeners**
 
 `[Insert screenshot: listeners for frontend/backend ALBs]`
 
-**Figure 28: Healthy target groups**
+**Figure 30: Blue and green target groups**
 
-`[Insert screenshot: target groups showing healthy ECS targets]`
+`[Insert screenshot: four target groups with ports and health check paths]`
+
+**Figure 31: Healthy target groups**
+
+`[Insert screenshot after ECS services are created: target groups showing healthy ECS targets]`
 
 ---
 
@@ -485,10 +518,10 @@ The solution includes storage and notification resources required by the assessm
 
 Resources:
 
-- S3 bucket for CodePipeline artifacts
-- S3 bucket for application assets
-- DynamoDB table for users, posts, raw source records, and demo transaction data
-- SNS topic for deployment or scaling notifications
+- S3 bucket for CodePipeline artifacts: `dce042-dev-pipeline-artifacts-345594568549-ap-southeast-2`
+- S3 bucket for application assets: `dce042-dev-app-assets-345594568549-ap-southeast-2`
+- DynamoDB table for users, posts, raw source records, and demo transaction data: `dce042-users-posts`
+- SNS topic for deployment or scaling notifications: `dce042-dev-critical-notifications`
 
 In this implementation, DynamoDB is used as the AWS-managed application data resource required by the assessment. The backend stores imported users, posts, raw source traceability records, and demo transaction records in the `dce042-users-posts` table. The backend ECS task role grants table access without storing AWS access keys inside the container.
 
@@ -499,6 +532,7 @@ Table name: dce042-users-posts
 Partition key: pk string
 Sort key: sk string
 Billing mode: PAY_PER_REQUEST
+Point-in-time recovery: ENABLED
 
 USER item:        pk = USER#<externalUserId>, sk = PROFILE
 POST item:        pk = USER#<externalUserId>, sk = POST#<externalPostId>
@@ -506,15 +540,22 @@ RAW_SOURCE item:  pk = RAW#<sourceType>#<externalId>, sk = METADATA
 TRANSACTION item: pk = TRANSACTION#<transactionId>, sk = METADATA
 ```
 
+Terraform managed the existing DynamoDB table by importing it into state:
+
+```text
+terraform import module.data.aws_dynamodb_table.application dce042-users-posts
+terraform apply result: 10 added, 1 changed, 0 destroyed
+```
+
 ### Screenshot Placeholders
 
 **Figure 29: CodePipeline artifact S3 bucket**
 
-`[Insert screenshot: S3 artifact bucket]`
+`[Insert screenshot: S3 artifact bucket dce042-dev-pipeline-artifacts-345594568549-ap-southeast-2]`
 
 **Figure 30: Application assets S3 bucket**
 
-`[Insert screenshot: S3 assets bucket]`
+`[Insert screenshot: S3 assets bucket dce042-dev-app-assets-345594568549-ap-southeast-2]`
 
 **Figure 31: DynamoDB application table**
 
@@ -526,7 +567,7 @@ TRANSACTION item: pk = TRANSACTION#<transactionId>, sk = METADATA
 
 **Figure 32: SNS topic and subscription**
 
-`[Insert screenshot: SNS topic and confirmed email subscription]`
+`[Insert screenshot: SNS topic dce042-dev-critical-notifications. If email subscription is configured later, include the confirmed subscription screenshot.]`
 
 ---
 
@@ -536,10 +577,22 @@ Each ECS service is configured with autoscaling and CloudWatch alarms. The goal 
 
 Required total:
 
-- Four scaling policies
-- Four CloudWatch alarms
+- Four scaling policies:
+  `dce042-dev-frontend-up`, `dce042-dev-frontend-down`, `dce042-dev-backend-up`, `dce042-dev-backend-down`
+- Four CloudWatch alarms:
+  `dce042-dev-frontend-cpu-high`, `dce042-dev-frontend-cpu-low`, `dce042-dev-backend-cpu-high`, `dce042-dev-backend-cpu-low`
 - CloudWatch logs for containers
-- SNS notification target
+- SNS notification target:
+  `arn:aws:sns:ap-southeast-2:345594568549:dce042-dev-critical-notifications`
+
+Autoscaling limits:
+
+```text
+frontend-service: min 1, max 2
+backend-service:  min 1, max 2
+```
+
+The CPU high alarms trigger scale-up policies when average CPU is above 60%. The CPU low alarms trigger scale-down policies when average CPU is below 20%. At idle, a low CPU alarm may enter `ALARM` state; this is expected and does not reduce the service below the configured minimum capacity of one task.
 
 ### Screenshot Placeholders
 

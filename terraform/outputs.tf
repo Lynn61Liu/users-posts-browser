@@ -55,3 +55,45 @@ output "ecr" {
     repository_arns  = module.ecr.repository_arns
   }
 }
+
+output "alb" {
+  description = "Created public ALBs, listeners, and blue/green target groups."
+  value = {
+    alb_arns           = module.alb.alb_arns
+    alb_dns_names      = module.alb.alb_dns_names
+    listener_arns      = module.alb.listener_arns
+    target_group_names = module.alb.target_group_names
+    target_group_arns  = module.alb.target_group_arns
+  }
+}
+
+output "ecs" {
+  description = "Created ECS Fargate cluster, task definitions, services, and log groups."
+  value = {
+    cluster_name         = module.ecs.cluster_name
+    cluster_arn          = module.ecs.cluster_arn
+    service_names        = module.ecs.service_names
+    service_arns         = module.ecs.service_arns
+    task_definition_arns = module.ecs.task_definition_arns
+    log_group_names      = module.ecs.log_group_names
+  }
+}
+
+output "data" {
+  description = "Created S3 and DynamoDB data resources."
+  value       = module.data.storage_resources
+}
+
+output "monitoring" {
+  description = "Created notification resources and monitoring integration points."
+  value       = module.monitoring.notification_resources
+}
+
+output "autoscaling" {
+  description = "Created ECS autoscaling targets, policies, and alarms."
+  value = {
+    targets          = module.autoscaling.autoscaling_targets
+    scaling_policies = module.autoscaling.scaling_policy_names
+    cpu_alarms       = module.autoscaling.cloudwatch_alarm_names
+  }
+}

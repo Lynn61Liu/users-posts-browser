@@ -8,6 +8,11 @@ variable "environment" {
   type        = string
 }
 
+variable "aws_region" {
+  description = "AWS region used in globally unique S3 bucket names."
+  type        = string
+}
+
 variable "dynamodb_table_name" {
   description = "DynamoDB application table name."
   type        = string

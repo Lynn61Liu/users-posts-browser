@@ -1338,25 +1338,76 @@ terraform output ecr
 作业要求两个 public-facing ALBs：
 
 ```text
-frontend-alb
-backend-alb
+Frontend ALB:
+  Name: dce042-dev-frontend-alb
+  DNS: dce042-dev-frontend-alb-1508953672.ap-southeast-2.elb.amazonaws.com
+  Scheme: internet-facing
+  State: active
+  Listener: HTTP 80 -> dce042-dev-frontend-blue-tg
+
+Backend ALB:
+  Name: dce042-dev-backend-alb
+  DNS: dce042-dev-backend-alb-1291356867.ap-southeast-2.elb.amazonaws.com
+  Scheme: internet-facing
+  State: active
+  Listener: HTTP 80 -> dce042-dev-backend-blue-tg
 ```
 
 每个 ALB 需要：
 
-- listener 80
+- listener 80：已创建
 - optional listener 443
-- target group blue
-- target group green
-- health check path
+- target group blue：已创建
+- target group green：已创建
+- health check path：已配置
 
 Blue/Green 建议每个服务两个 target groups：
 
 ```text
-frontend-blue-tg
-frontend-green-tg
-backend-blue-tg
-backend-green-tg
+frontend-blue-tg:
+  Name: dce042-dev-frontend-blue-tg
+  Port: 80
+  Target type: ip
+  Health check: /health
+
+frontend-green-tg:
+  Name: dce042-dev-frontend-green-tg
+  Port: 80
+  Target type: ip
+  Health check: /health
+
+backend-blue-tg:
+  Name: dce042-dev-backend-blue-tg
+  Port: 8080
+  Target type: ip
+  Health check: /actuator/health
+
+backend-green-tg:
+  Name: dce042-dev-backend-green-tg
+  Port: 8080
+  Target type: ip
+  Health check: /actuator/health
+```
+
+说明：
+
+- `target_type = ip` 是 ECS Fargate 的正确配置，因为 Fargate task 没有 EC2 instance ID，ALB 需要直接注册 task 的 private IP。
+- `blue` target group 是当前 listener 默认转发目标。
+- `green` target group 后面由 CodeDeploy blue/green deployment 使用。
+- 目前 target groups 还没有 healthy targets，因为 ECS services 还没有创建；第 11 步创建 ECS 后再截图 healthy targets。
+- HTTPS/443 暂未创建，因为本项目还没有 domain 和 ACM certificate。
+
+Terraform 执行结果：
+
+```text
+Apply complete! Resources: 8 added, 0 changed, 0 destroyed.
+```
+
+查看输出：
+
+```bash
+cd terraform
+terraform output alb
 ```
 
 截图：
@@ -1364,7 +1415,8 @@ backend-green-tg
 - 两个 ALB
 - listener
 - target groups
-- healthy targets
+- health check path
+- healthy targets：第 11 步 ECS service 创建后再截图
 
 > 云端配置：AWS ECS Fargate + CloudWatch Logs
 
@@ -1372,12 +1424,39 @@ backend-green-tg
 
 创建：
 
-- ECS cluster
-- frontend task definition
-- backend task definition
-- frontend ECS service
-- backend ECS service
-- CloudWatch log groups
+- ECS cluster：已创建 `dce042-dev-ecs-cluster`
+- frontend task definition：已创建 `dce042-frontend-task:1`
+- backend task definition：已创建 `dce042-backend-task:1`
+- frontend ECS service：已创建 `frontend-service`
+- backend ECS service：已创建 `backend-service`
+- CloudWatch log groups：已创建 `/ecs/dce042-frontend` 和 `/ecs/dce042-backend`
+
+前置镜像：
+
+```text
+Frontend image:
+  345594568549.dkr.ecr.ap-southeast-2.amazonaws.com/dce042-frontend:latest
+
+Backend image:
+  345594568549.dkr.ecr.ap-southeast-2.amazonaws.com/dce042-backend:latest
+```
+
+本地是 Apple Silicon (`arm64`)，为了匹配 ECS task definition 的 `X86_64` runtime platform，镜像使用以下方式构建并推送：
+
+```bash
+aws ecr get-login-password --region ap-southeast-2 \
+  | docker login --username AWS --password-stdin 345594568549.dkr.ecr.ap-southeast-2.amazonaws.com
+
+docker buildx build --platform linux/amd64 \
+  -f backend/Dockerfile \
+  -t 345594568549.dkr.ecr.ap-southeast-2.amazonaws.com/dce042-backend:latest \
+  --push backend
+
+docker buildx build --platform linux/amd64 \
+  -f frontend/Dockerfile \
+  -t 345594568549.dkr.ecr.ap-southeast-2.amazonaws.com/dce042-frontend:latest \
+  --push frontend
+```
 
 推荐 task size：
 
@@ -1390,16 +1469,18 @@ Frontend container:
 
 ```text
 container name: frontend
-image: dce042-frontend:<tag>
+image: dce042-frontend:latest
 port: 80
 health check: /health
+environment:
+  BACKEND_UPSTREAM=dce042-dev-backend-alb-1291356867.ap-southeast-2.elb.amazonaws.com
 ```
 
 Backend container:
 
 ```text
 container name: backend
-image: dce042-backend:<tag>
+image: dce042-backend:latest
 port: 8080
 health check: /actuator/health
 environment:
@@ -1431,6 +1512,63 @@ backend-service:
 - Backend service 的 IAM task role 需要 DynamoDB table 访问权限。
 - Backend 不需要额外数据库服务；云端部署只需要 DynamoDB table 和 task role permission。
 
+实际运行状态：
+
+```text
+frontend-service:
+  desiredCount: 1
+  runningCount: 1
+  pendingCount: 0
+  task set stability: STEADY_STATE
+  registered target: dce042-dev-frontend-blue-tg
+  target health: healthy
+
+backend-service:
+  desiredCount: 1
+  runningCount: 1
+  pendingCount: 0
+  task set stability: STEADY_STATE
+  registered target: dce042-dev-backend-blue-tg
+  target health: healthy
+```
+
+验证命令：
+
+```bash
+terraform output ecs
+
+curl http://dce042-dev-frontend-alb-1508953672.ap-southeast-2.elb.amazonaws.com/health
+curl http://dce042-dev-backend-alb-1291356867.ap-southeast-2.elb.amazonaws.com/actuator/health
+curl http://dce042-dev-backend-alb-1291356867.ap-southeast-2.elb.amazonaws.com/api/users
+curl http://dce042-dev-frontend-alb-1508953672.ap-southeast-2.elb.amazonaws.com/api/users
+```
+
+实际验证结果：
+
+```text
+Frontend /health:
+  HTTP 200 OK
+  Body: ok
+
+Backend /actuator/health:
+  HTTP 200 OK
+  Body includes: "status":"UP"
+
+Backend /api/users:
+  HTTP 200 OK
+  Returned users from DynamoDB
+
+Frontend /api/users:
+  HTTP 200 OK
+  Returned users through frontend Nginx proxy to backend ALB
+```
+
+Terraform 执行结果：
+
+```text
+Apply complete! Resources: 7 added, 0 changed, 0 destroyed.
+```
+
 截图：
 
 - ECS cluster
@@ -1438,6 +1576,10 @@ backend-service:
 - task definition revisions
 - running tasks
 - CloudWatch logs
+- target groups showing healthy registered targets
+- frontend ALB `/health` output
+- backend ALB `/actuator/health` output
+- `/api/users` output through frontend ALB
 
 > 云端配置：AWS S3 + AWS DynamoDB + AWS SNS
 
@@ -1449,27 +1591,28 @@ backend-service:
 
 创建两个 buckets：
 
-- `dce042-pipeline-artifacts-<unique-suffix>`
-- `dce042-app-assets-<unique-suffix>`
+- `dce042-dev-pipeline-artifacts-345594568549-ap-southeast-2`
+- `dce042-dev-app-assets-345594568549-ap-southeast-2`
 
 配置：
 
 - block public access 默认开启
 - encryption 开启
-- versioning 可选
-- lifecycle policy 可选
+- versioning 开启
+- pipeline artifacts bucket 配置 lifecycle policy，30 天删除旧 artifacts，7 天删除旧版本
 
 > 云端配置：AWS DynamoDB
 
 ### 12.2 DynamoDB
 
-创建一个 table：
+创建并由 Terraform 管理一个 table：
 
 ```text
 name: dce042-users-posts
 partition key: pk string
 sort key: sk string
 billing mode: PAY_PER_REQUEST
+point-in-time recovery: ENABLED
 ```
 
 DynamoDB 的作用：
@@ -1524,49 +1667,113 @@ arn:aws:dynamodb:<region>:<account-id>:table/dce042-users-posts
 创建一个 topic：
 
 ```text
-dce042-critical-notifications
+dce042-dev-critical-notifications
 ```
 
-可以订阅自己的 email，用于展示告警通知。
+可以订阅自己的 email，用于展示告警通知。当前 `notification_email` 为空，所以 Terraform 只创建 SNS topic，暂时不创建 email subscription。
+
+实际执行结果：
+
+```text
+terraform import:
+  module.data.aws_dynamodb_table.application -> dce042-users-posts
+
+terraform apply:
+  10 added, 1 changed, 0 destroyed
+
+S3 buckets:
+  dce042-dev-pipeline-artifacts-345594568549-ap-southeast-2
+  dce042-dev-app-assets-345594568549-ap-southeast-2
+
+DynamoDB:
+  dce042-users-posts
+  status: ACTIVE
+  billing mode: PAY_PER_REQUEST
+  item count: 220
+  point-in-time recovery: ENABLED
+
+SNS:
+  dce042-dev-critical-notifications
+  arn: arn:aws:sns:ap-southeast-2:345594568549:dce042-dev-critical-notifications
+```
 
 截图：
 
 - S3 buckets
+- S3 bucket public access block / encryption / versioning
 - DynamoDB table
+- DynamoDB table items
+- DynamoDB continuous backups / point-in-time recovery
 - SNS topic
-- email subscription confirmed
+- email subscription confirmed，如果后续配置了邮箱
 
 > 云端配置：AWS ECS Service Auto Scaling + AWS CloudWatch + AWS SNS
 
 ## 13. Autoscaling 和 Monitoring
 
-每个 ECS service 创建：
-
-- high CPU alarm
-- low CPU alarm
-- scale out policy
-- scale in policy
-
-总数：
+创建结果：
 
 ```text
-2 services x 2 alarms = 4 CloudWatch alarms
-2 services x 2 scaling policies = 4 scaling policies
+terraform apply:
+  10 added, 0 changed, 0 destroyed
+
+Scalable targets:
+  service/dce042-dev-ecs-cluster/frontend-service
+    min: 1
+    max: 2
+
+  service/dce042-dev-ecs-cluster/backend-service
+    min: 1
+    max: 2
+
+Scaling policies:
+  dce042-dev-frontend-up
+  dce042-dev-frontend-down
+  dce042-dev-backend-up
+  dce042-dev-backend-down
+
+CloudWatch CPU alarms:
+  dce042-dev-frontend-cpu-high
+    metric: CPUUtilization
+    threshold: > 60
+    actions: frontend scale-up policy + SNS topic
+
+  dce042-dev-frontend-cpu-low
+    metric: CPUUtilization
+    threshold: < 20
+    actions: frontend scale-down policy + SNS topic
+
+  dce042-dev-backend-cpu-high
+    metric: CPUUtilization
+    threshold: > 60
+    actions: backend scale-up policy + SNS topic
+
+  dce042-dev-backend-cpu-low
+    metric: CPUUtilization
+    threshold: < 20
+    actions: backend scale-down policy + SNS topic
+
+SNS action:
+  arn:aws:sns:ap-southeast-2:345594568549:dce042-dev-critical-notifications
 ```
 
-推荐 demo 阈值：
+说明：
 
-```text
-High CPU: > 70%
-Low CPU: < 20%
-```
+- 作业要求 four autoscaling policies，本项目创建 4 个：frontend up/down + backend up/down。
+- 每个 ECS service 的 desired count 最小是 1、最大是 2，这样可以展示扩缩容能力，同时控制费用。
+- CloudWatch alarm 刚创建时可能显示 `INSUFFICIENT_DATA`，这是因为还没有足够 metric 数据。
+- Low CPU alarm 在应用空闲时可能显示 `ALARM`，这是正常状态；因为 service 已经在 `min_capacity = 1`，所以不会缩到 0。
+- Alarm action 同时连接 scaling policy 和 SNS topic，说明它既可以触发扩缩容，也可以通知。
 
 截图：
 
-- CloudWatch alarms
-- ECS service auto scaling configuration
-- SNS alarm action
-- CloudWatch logs
+- ECS service Auto Scaling 页面：frontend service，显示 min 1 / max 2。
+- ECS service Auto Scaling 页面：backend service，显示 min 1 / max 2。
+- Application Auto Scaling policies，显示 4 个 policies。
+- CloudWatch alarms，显示 4 个 CPU alarms。
+- 任意一个 CloudWatch alarm detail，显示 alarm action 包含 SNS topic 和 scaling policy。
+- SNS topic `dce042-dev-critical-notifications`。
+- CloudWatch log groups：`/ecs/dce042-frontend` 和 `/ecs/dce042-backend`。
 
 > 云端配置：AWS CodePipeline + CodeBuild + CodeDeploy + ECR + ECS
 
