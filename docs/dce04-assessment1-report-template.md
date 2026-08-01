@@ -408,15 +408,18 @@ Amazon ECR stores Docker images for each service. The CI/CD pipeline builds imag
 
 ECR repositories:
 
-- `dce042-frontend`
-- `dce042-backend`
+- Frontend: `dce042-frontend`
+  `345594568549.dkr.ecr.ap-southeast-2.amazonaws.com/dce042-frontend`
+- Backend: `dce042-backend`
+  `345594568549.dkr.ecr.ap-southeast-2.amazonaws.com/dce042-backend`
 
 Image management includes:
 
 - Versioned image tags
-- Optional image scanning
-- Encryption
-- Lifecycle policy for old images
+- Image scanning on push
+- AES256 encryption
+- Lifecycle policy to retain the latest 10 images
+- `force_delete = true` for assessment cleanup
 
 ### Screenshot Placeholders
 
@@ -424,11 +427,19 @@ Image management includes:
 
 `[Insert screenshot: ECR repository list]`
 
-**Figure 23: Frontend image pushed to ECR**
+**Figure 23: ECR repository security settings**
+
+`[Insert screenshot: scan on push and AES256 encryption settings]`
+
+**Figure 24: ECR lifecycle policy**
+
+`[Insert screenshot: lifecycle policy keeping recent images]`
+
+**Figure 25: Frontend image pushed to ECR**
 
 `[Insert screenshot: frontend ECR image tag]`
 
-**Figure 24: Backend image pushed to ECR**
+**Figure 26: Backend image pushed to ECR**
 
 `[Insert screenshot: backend ECR image tag]`
 

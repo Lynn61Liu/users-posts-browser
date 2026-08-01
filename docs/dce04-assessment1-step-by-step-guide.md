@@ -1288,20 +1288,47 @@ terraform output security
 创建两个 repositories：
 
 ```text
-dce042-frontend
-dce042-backend
+Frontend repository:
+  Name: dce042-frontend
+  URI: 345594568549.dkr.ecr.ap-southeast-2.amazonaws.com/dce042-frontend
+  Scan on push: enabled
+  Encryption: AES256
+  Image tag mutability: MUTABLE
+
+Backend repository:
+  Name: dce042-backend
+  URI: 345594568549.dkr.ecr.ap-southeast-2.amazonaws.com/dce042-backend
+  Scan on push: enabled
+  Encryption: AES256
+  Image tag mutability: MUTABLE
 ```
 
-建议配置：
+已配置：
 
 - image scanning on push
-- encryption
-- lifecycle policy
-- immutable tags 可选
+- AES256 encryption
+- lifecycle policy：只保留最近 10 个 images
+- `force_delete = true`：方便作业结束后 Terraform destroy 清理仓库
 
-截图：
+Terraform 执行结果：
+
+```text
+Apply complete! Resources: 4 added, 0 changed, 0 destroyed.
+```
+
+查看输出：
+
+```bash
+cd terraform
+terraform output ecr
+```
+
+截图证据：
 
 - 两个 ECR repositories
+- repository settings showing scan on push enabled
+- repository settings showing AES256 encryption
+- lifecycle policy showing keep most recent 10 images
 - 镜像 push 后的 image tags
 
 > 云端配置：AWS Elastic Load Balancing / ECS target groups

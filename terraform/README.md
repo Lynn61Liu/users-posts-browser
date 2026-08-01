@@ -87,3 +87,19 @@ Backend task role: arn:aws:iam::345594568549:role/dce042-dev-backend-task-role
 ```
 
 The backend task role grants read/write permissions only to the `dce042-users-posts` DynamoDB table and its indexes.
+
+## ECR Resources
+
+Step 9 has created the container image repositories:
+
+```text
+Frontend repository:
+  dce042-frontend
+  345594568549.dkr.ecr.ap-southeast-2.amazonaws.com/dce042-frontend
+
+Backend repository:
+  dce042-backend
+  345594568549.dkr.ecr.ap-southeast-2.amazonaws.com/dce042-backend
+```
+
+Both repositories have scan on push enabled, AES256 encryption, and a lifecycle policy that keeps the most recent 10 images.
