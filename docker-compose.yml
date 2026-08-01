@@ -1,40 +1,17 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: users-posts-browser-postgres
-    environment:
-      POSTGRES_DB: ${DB_NAME:-users_posts_browser}
-      POSTGRES_USER: ${DB_USERNAME:-users_posts_browser}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-users_posts_browser}
-    ports:
-      - '5432:5432'
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test:
-        [
-          'CMD-SHELL',
-          'pg_isready -U ${DB_USERNAME:-users_posts_browser} -d ${DB_NAME:-users_posts_browser}',
-        ]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   backend:
     build:
       context: ./backend
     container_name: users-posts-browser-backend
     environment:
       SERVER_PORT: ${SERVER_PORT:-8080}
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: ${DB_NAME:-users_posts_browser}
-      DB_USERNAME: ${DB_USERNAME:-users_posts_browser}
-      DB_PASSWORD: ${DB_PASSWORD:-users_posts_browser}
+      AWS_PROFILE: ${AWS_PROFILE:-default}
+      AWS_REGION: ${AWS_REGION:-ap-southeast-2}
+      APP_DYNAMODB_ENABLED: ${APP_DYNAMODB_ENABLED:-true}
+      DYNAMODB_TABLE_NAME: ${DYNAMODB_TABLE_NAME:-dce042-users-posts}
       APP_DEV_RESET_ENABLED: ${APP_DEV_RESET_ENABLED:-false}
-    depends_on:
-      postgres:
-        condition: service_healthy
+    volumes:
+      - ${HOME}/.aws:/root/.aws:ro
     ports:
       - '8080:8080'
 
@@ -46,10 +23,9 @@ services:
         VITE_APP_VERSION: ${VITE_APP_VERSION:-Local Development}
         VITE_DEPLOY_ENV: ${VITE_DEPLOY_ENV:-Local environment}
     container_name: users-posts-browser-frontend
+    environment:
+      BACKEND_UPSTREAM: ${BACKEND_UPSTREAM:-backend:8080}
     depends_on:
       - backend
     ports:
       - '3000:80'
-
-volumes:
-  postgres_data:

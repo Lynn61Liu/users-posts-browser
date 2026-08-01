@@ -1,199 +1,155 @@
 package com.example.userspostsbrowser.importflow;
 
-import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import com.example.userspostsbrowser.importflow.dto.ImportedPostRecord;
 import com.example.userspostsbrowser.importflow.dto.ImportedUserRecord;
+import com.example.userspostsbrowser.transactions.DynamoDbProperties;
+
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 
 @Repository
 public class SyncRepository {
 
-	private final JdbcTemplate jdbcTemplate;
+	private final DynamoDbClient dynamoDbClient;
+	private final DynamoDbProperties properties;
 
-	public SyncRepository(JdbcTemplate jdbcTemplate) {
-		this.jdbcTemplate = jdbcTemplate;
+	public SyncRepository(DynamoDbClient dynamoDbClient, DynamoDbProperties properties) {
+		this.dynamoDbClient = dynamoDbClient;
+		this.properties = properties;
 	}
 
 	public Optional<RawSourceSnapshot> findRawSource(String sourceType, long externalId) {
-		return jdbcTemplate.query("""
-				select id, payload_hash
-				from raw_source
-				where source_type = ? and external_id = ?
-				""",
-			resultSet -> {
-				if (!resultSet.next()) {
-					return Optional.empty();
-				}
-				return Optional.of(new RawSourceSnapshot(
-					resultSet.getLong("id"),
-					resultSet.getString("payload_hash")
-				));
-			},
-			sourceType,
-			externalId
-		);
-	}
+		Map<String, AttributeValue> item = dynamoDbClient.getItem(GetItemRequest.builder()
+			.tableName(properties.tableName())
+			.key(key(rawPk(sourceType, externalId), "METADATA"))
+			.build()).item();
 
-	public long insertRawSource(String sourceType, long externalId, String rawPayload, String payloadHash, Instant syncedAt, String syncResult, String syncBatchId) {
-		Long id = jdbcTemplate.queryForObject("""
-			insert into raw_source (
-				source_type,
-				external_id,
-				raw_payload,
-				payload_hash,
-				synced_at,
-				sync_result,
-				sync_batch_id
-			)
-			values (?, ?, ?::jsonb, ?, ?, ?, ?)
-			returning id
-			""",
-			Long.class,
-			sourceType,
-			externalId,
-			rawPayload,
-			payloadHash,
-			Timestamp.from(syncedAt),
-			syncResult,
-			syncBatchId
-		);
-		return id;
-	}
-
-	public void updateRawSource(long id, String rawPayload, String payloadHash, Instant syncedAt, String syncResult, String syncBatchId) {
-		jdbcTemplate.update("""
-			update raw_source
-			set raw_payload = ?::jsonb,
-			    payload_hash = ?,
-			    synced_at = ?,
-			    sync_result = ?,
-			    sync_batch_id = ?
-			where id = ?
-			""",
-			rawPayload,
-			payloadHash,
-			Timestamp.from(syncedAt),
-			syncResult,
-			syncBatchId,
-			id
-		);
-	}
-
-	public long findUserIdByExternalId(long externalId) {
-		Long id = jdbcTemplate.queryForObject("""
-			select id
-			from users
-			where external_id = ?
-			""", Long.class, externalId);
-		if (id == null) {
-			throw new IllegalStateException("User " + externalId + " was not found");
+		if (item == null || item.isEmpty()) {
+			return Optional.empty();
 		}
-		return id;
+
+		return Optional.of(new RawSourceSnapshot(sourceType, externalId, string(item, "payloadHash")));
 	}
 
-	public long upsertUser(ImportedUserRecord user, long rawSourceId, Instant now) {
-		Long id = jdbcTemplate.queryForObject("""
-			insert into users (
-				external_id,
-				raw_source_id,
-				name,
-				username,
-				email,
-				phone,
-				website,
-				address_street,
-				address_suite,
-				address_city,
-				address_zipcode,
-				address_geo_lat,
-				address_geo_lng,
-				company_name,
-				company_catch_phrase,
-				company_bs,
-				created_at,
-				updated_at
-			)
-			values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			on conflict (external_id) do update set
-				raw_source_id = excluded.raw_source_id,
-				name = excluded.name,
-				username = excluded.username,
-				email = excluded.email,
-				phone = excluded.phone,
-				website = excluded.website,
-				address_street = excluded.address_street,
-				address_suite = excluded.address_suite,
-				address_city = excluded.address_city,
-				address_zipcode = excluded.address_zipcode,
-				address_geo_lat = excluded.address_geo_lat,
-				address_geo_lng = excluded.address_geo_lng,
-				company_name = excluded.company_name,
-				company_catch_phrase = excluded.company_catch_phrase,
-				company_bs = excluded.company_bs,
-				updated_at = excluded.updated_at
-			returning id
-			""",
-			Long.class,
-			user.externalId(),
-			rawSourceId,
-			user.name(),
-			user.username(),
-			user.email(),
-			user.phone(),
-			user.website(),
-			user.addressStreet(),
-			user.addressSuite(),
-			user.addressCity(),
-			user.addressZipcode(),
-			user.addressGeoLat(),
-			user.addressGeoLng(),
-			user.companyName(),
-			user.companyCatchPhrase(),
-			user.companyBs(),
-			Timestamp.from(now),
-			Timestamp.from(now)
-		);
-		return id;
+	public void putRawSource(String sourceType, long externalId, String rawPayload, String payloadHash, Instant syncedAt, String syncResult, String syncBatchId) {
+		Map<String, AttributeValue> item = new LinkedHashMap<>();
+		item.put("pk", stringValue(rawPk(sourceType, externalId)));
+		item.put("sk", stringValue("METADATA"));
+		item.put("entityType", stringValue("RAW_SOURCE"));
+		item.put("sourceType", stringValue(sourceType));
+		item.put("externalId", numberValue(externalId));
+		item.put("rawPayload", stringValue(rawPayload));
+		item.put("payloadHash", stringValue(payloadHash));
+		item.put("syncedAt", stringValue(syncedAt.toString()));
+		item.put("syncResult", stringValue(syncResult));
+		item.put("syncBatchId", stringValue(syncBatchId));
+		putItem(item);
 	}
 
-	public long upsertPost(ImportedPostRecord post, long rawSourceId, long userId, Instant now) {
-		Long id = jdbcTemplate.queryForObject("""
-			insert into posts (
-				external_id,
-				raw_source_id,
-				user_id,
-				title,
-				body,
-				created_at,
-				updated_at
-			)
-			values (?, ?, ?, ?, ?, ?, ?)
-			on conflict (external_id) do update set
-				raw_source_id = excluded.raw_source_id,
-				user_id = excluded.user_id,
-				title = excluded.title,
-				body = excluded.body,
-				updated_at = excluded.updated_at
-			returning id
-			""",
-			Long.class,
-			post.externalId(),
-			rawSourceId,
-			userId,
-			post.title(),
-			post.body(),
-			Timestamp.from(now),
-			Timestamp.from(now)
-		);
-		return id;
+	public void upsertUser(ImportedUserRecord user, Instant now) {
+		Map<String, AttributeValue> item = new LinkedHashMap<>();
+		item.put("pk", stringValue(userPk(user.externalId())));
+		item.put("sk", stringValue("PROFILE"));
+		item.put("entityType", stringValue("USER"));
+		item.put("id", numberValue(user.externalId()));
+		item.put("externalId", numberValue(user.externalId()));
+		item.put("name", stringValue(user.name()));
+		item.put("username", stringValue(user.username()));
+		item.put("email", stringValue(user.email()));
+		item.put("phone", stringValue(user.phone()));
+		item.put("website", stringValue(user.website()));
+		item.put("addressStreet", stringValue(user.addressStreet()));
+		item.put("addressSuite", stringValue(user.addressSuite()));
+		item.put("addressCity", stringValue(user.addressCity()));
+		item.put("addressZipcode", stringValue(user.addressZipcode()));
+		item.put("addressGeoLat", stringValue(user.addressGeoLat()));
+		item.put("addressGeoLng", stringValue(user.addressGeoLng()));
+		item.put("companyName", stringValue(user.companyName()));
+		item.put("companyCatchPhrase", stringValue(user.companyCatchPhrase()));
+		item.put("companyBs", stringValue(user.companyBs()));
+		item.put("updatedAt", stringValue(now.toString()));
+		putItem(item);
 	}
 
+	public void upsertPost(ImportedPostRecord post, Instant now) {
+		Map<String, AttributeValue> item = new LinkedHashMap<>();
+		item.put("pk", stringValue(userPk(post.userExternalId())));
+		item.put("sk", stringValue(postSk(post.externalId())));
+		item.put("entityType", stringValue("POST"));
+		item.put("id", numberValue(post.externalId()));
+		item.put("externalId", numberValue(post.externalId()));
+		item.put("userExternalId", numberValue(post.userExternalId()));
+		item.put("title", stringValue(post.title()));
+		item.put("body", stringValue(post.body()));
+		item.put("updatedAt", stringValue(now.toString()));
+		putItem(item);
+	}
+
+	public boolean userExists(long externalId) {
+		Map<String, AttributeValue> item = dynamoDbClient.getItem(GetItemRequest.builder()
+			.tableName(properties.tableName())
+			.key(key(userPk(externalId), "PROFILE"))
+			.build()).item();
+		return item != null && !item.isEmpty();
+	}
+
+	private void putItem(Map<String, AttributeValue> item) {
+		dynamoDbClient.putItem(PutItemRequest.builder()
+			.tableName(properties.tableName())
+			.item(item)
+			.build());
+	}
+
+	public static Map<String, AttributeValue> key(String pk, String sk) {
+		Map<String, AttributeValue> key = new LinkedHashMap<>();
+		key.put("pk", stringValue(pk));
+		key.put("sk", stringValue(sk));
+		return key;
+	}
+
+	public static String userPk(long externalId) {
+		return "USER#" + externalId;
+	}
+
+	public static String postSk(long externalId) {
+		return "POST#" + externalId;
+	}
+
+	static String rawPk(String sourceType, long externalId) {
+		return "RAW#" + sourceType + "#" + externalId;
+	}
+
+	public static AttributeValue stringValue(String value) {
+		return AttributeValue.builder()
+			.s(value == null ? "" : value)
+			.build();
+	}
+
+	static AttributeValue numberValue(long value) {
+		return AttributeValue.builder()
+			.n(Long.toString(value))
+			.build();
+	}
+
+	public static String string(Map<String, AttributeValue> item, String name) {
+		AttributeValue value = item.get(name);
+		return value == null ? "" : value.s();
+	}
+
+	public static long number(Map<String, AttributeValue> item, String name) {
+		AttributeValue value = item.get(name);
+		return value == null ? 0L : Long.parseLong(value.n());
+	}
 }
 
-record RawSourceSnapshot(long id, String payloadHash) {
+record RawSourceSnapshot(String sourceType, long externalId, String payloadHash) {
 }

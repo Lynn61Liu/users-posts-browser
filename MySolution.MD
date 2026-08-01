@@ -1,6 +1,6 @@
 ## 1. Overview
 
-This project is a small enterprise-style integration application that consumes Users and Posts from JSONPlaceholder, stores them in a SQL database, and exposes them through a user-friendly web interface.
+This project is a small enterprise-style integration application that consumes Users and Posts from JSONPlaceholder, stores them in Amazon DynamoDB, and exposes them through a user-friendly web interface.
 
 Success for this project means:
 - external data can be imported reliably
@@ -15,7 +15,7 @@ Success for this project means:
 
 The system includes:
 - importing Users and Posts from JSONPlaceholder
-- persisting imported data in PostgreSQL
+- persisting imported data in DynamoDB
 - rendering a frontend for user browsing and post viewing
 - supporting a repeatable startup flow through Docker Compose
 
@@ -69,7 +69,7 @@ This assessment does not include:
 
 - The system shall import Users from JSONPlaceholder.
 - The system shall import Posts from JSONPlaceholder.
-- The system shall persist imported data in PostgreSQL.
+- The system shall persist imported data in DynamoDB.
 - The system shall display a list of users.
 - The system shall display details for a selected user.
 - The system shall display posts associated with the selected user.
@@ -99,7 +99,7 @@ The system has two main problems to solve:
 - how to get external JSON data into the local database
 - how to read local data and render it on the web page
 
-The external data comes from JSONPlaceholder. The internal data is stored in PostgreSQL. The UI reads from the local database instead of reading directly from the external API.
+The external data comes from JSONPlaceholder. The internal data is stored in DynamoDB. The UI reads from the backend API instead of reading directly from the external API.
 
 ### 3.2 Architecture Design
 
@@ -117,7 +117,7 @@ The main data paths are:
 - external JSON is read from JSONPlaceholder
 - the import layer maps the raw data into internal records
 - the service layer compares hashes and decides whether data changed
-- the repository layer writes to PostgreSQL
+- the repository layer writes to DynamoDB
 - the frontend reads from the API and renders the local data
 
 ### 3.4 Workflow Design
@@ -134,10 +134,18 @@ The sync workflow is simple:
 
 ### 3.5 Database Design
 
-The database uses three tables:
+The database uses one DynamoDB table with a composite primary key:
 
-- `users` stores normalized user data with expanded address and company fields.
-- `posts` stores normalized post data and links back to `users`.
+- Table name: `dce042-users-posts`
+- Partition key: `pk`
+- Sort key: `sk`
+
+The table stores four item types:
+
+- `USER` items store expanded user fields, including address and company data.
+- `POST` items store posts under the owning user's partition.
+- `RAW_SOURCE` items store raw JSON payloads and hashes for traceability.
+- `TRANSACTION` items support the assessment DynamoDB transaction demo endpoint.
 - `raw_source` stores one raw JSON object per imported record, plus a hash for change detection.
 
 Key points:
@@ -285,7 +293,7 @@ The implementation uses four main technologies:
 
 - **Backend:** Spring Boot
 - **Frontend:** React with Vite
-- **Database:** PostgreSQL
+- **Database:** Amazon DynamoDB
 - **Runtime:** Docker and Docker Compose
 
 ### 4.1 Backend: Spring Boot with Java
@@ -296,7 +304,7 @@ I chose Java and Spring Boot because:
 
 - they fit the REST API style used by the project
 - they support a clean service and repository structure
-- they work naturally with PostgreSQL
+- they work naturally with AWS SDK based repository code
 - they are stable and easy to organize for a small business-style application
 - they match my own experience from academic and practice projects, so I can implement the solution reliably
 
@@ -305,7 +313,7 @@ The backend will handle:
 - syncing Users and Posts from JSONPlaceholder
 - mapping external JSON into internal records
 - comparing `payload_hash` values to detect changes
-- saving data into `raw_source`, `users`, and `posts`
+- saving data as `RAW_SOURCE`, `USER`, and `POST` DynamoDB items
 - exposing the API endpoints used by the frontend
 
 ### 4.2 Frontend: React with Vite
@@ -327,22 +335,23 @@ The frontend will handle:
 - showing loading, empty, success, info, and error states
 - calling the sync action when the user clicks the sync button
 
-### 4.3 Database: PostgreSQL
+### 4.3 Database: DynamoDB
 
-PostgreSQL is a good fit because the project stores normalized relational data and needs clear relationships between users, posts, and raw source records. It also supports the kind of constraints and data integrity this solution needs.
+DynamoDB is a good fit because the assessment explicitly requires a DynamoDB table and the project data is small, read-oriented, and easy to model with a single-table key design.
 
-I chose PostgreSQL because:
+I chose DynamoDB because:
 
-- it is a real SQL database and fits the assessment requirement
-- it supports primary keys, foreign keys, and unique constraints well
-- it works well for `users`, `posts`, and `raw_source`
-- it gives a clean way to store structured business data and raw JSON payloads together
+- it directly satisfies the AWS data service requirement
+- it avoids running an extra relational database service for this assessment
+- it can store users, posts, raw source records, and transaction demo items in one table
+- it works cleanly with ECS task role permissions
 
 The database will store:
 
 - expanded user fields, including address and company data
 - posts linked to users
 - raw JSON payloads for traceability
+- demo transaction records for DynamoDB validation
 - payload hashes for no-change detection
 
 ### 4.4 Runtime: Docker and Docker Compose
@@ -433,7 +442,7 @@ The runtime setup will let the project start with a single Compose command and a
 
 ## 6. Conclusion
 
-This solution is intentionally small and focused. It uses a layered Spring Boot backend, a React frontend, PostgreSQL for structured storage, and Docker for easy setup. The design keeps external data handling separate from local data display, which makes the system easier to understand, test, and extend.
+This solution is intentionally small and focused. It uses a layered Spring Boot backend, a React frontend, DynamoDB for application storage, and Docker for easy setup. The design keeps external data handling separate from local data display, which makes the system easier to understand, test, and extend.
 
 The main idea is simple: import Users and Posts from JSONPlaceholder, store them locally with traceability, and let the user browse the saved data through a clean web interface. The test plan supports that goal by checking mapping, sync behavior, API responses, and UI states in a clear order.
 

@@ -1,0 +1,70 @@
+version: 0.2
+
+env:
+  shell: bash
+  variables:
+    ECR_REPOSITORY_NAME: dce042-frontend
+    IMAGE_TAG_PREFIX: frontend
+    VITE_ENABLE_DEV_TOOLS: "false"
+    VITE_APP_VERSION: "AWS Deployment"
+    VITE_DEPLOY_ENV: "ECS Fargate"
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 22
+  pre_build:
+    commands:
+      - set -euo pipefail
+      - AWS_REGION="${AWS_DEFAULT_REGION:-${AWS_REGION:-ap-southeast-2}}"
+      - AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+      - ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+      - REPOSITORY_URI="${ECR_REGISTRY}/${ECR_REPOSITORY_NAME}"
+      - COMMIT_SHA="${CODEBUILD_RESOLVED_SOURCE_VERSION:-local}"
+      - IMAGE_TAG="${IMAGE_TAG_PREFIX}-${COMMIT_SHA:0:12}"
+      - IMAGE_URI="${REPOSITORY_URI}:${IMAGE_TAG}"
+      - FRONTEND_EXECUTION_ROLE_ARN="${FRONTEND_EXECUTION_ROLE_ARN:-arn:aws:iam::${AWS_ACCOUNT_ID}:role/dce042-ecs-task-execution-role}"
+      - FRONTEND_TASK_ROLE_ARN="${FRONTEND_TASK_ROLE_ARN:-arn:aws:iam::${AWS_ACCOUNT_ID}:role/dce042-frontend-task-role}"
+      - ': "${BACKEND_ALB_DNS_NAME:?Set BACKEND_ALB_DNS_NAME to the backend ALB DNS name before running the frontend CodeBuild project}"'
+      - echo "Logging in to Amazon ECR ${ECR_REGISTRY}"
+      - aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+      - echo "Installing frontend dependencies"
+      - cd frontend
+      - npm ci
+      - npm test -- --run
+      - cd ..
+  build:
+    commands:
+      - echo "Building frontend Docker image ${IMAGE_URI}"
+      - docker build
+        --build-arg VITE_ENABLE_DEV_TOOLS="${VITE_ENABLE_DEV_TOOLS}"
+        --build-arg VITE_APP_VERSION="${VITE_APP_VERSION}"
+        --build-arg VITE_DEPLOY_ENV="${VITE_DEPLOY_ENV}"
+        -f frontend/Dockerfile
+        -t "${ECR_REPOSITORY_NAME}:${IMAGE_TAG}"
+        frontend
+      - docker tag "${ECR_REPOSITORY_NAME}:${IMAGE_TAG}" "${IMAGE_URI}"
+  post_build:
+    commands:
+      - echo "Pushing frontend Docker image ${IMAGE_URI}"
+      - docker push "${IMAGE_URI}"
+      - mkdir -p build-artifacts/frontend
+      - printf '{"ImageURI":"%s"}' "${IMAGE_URI}" > build-artifacts/frontend/imageDetail.json
+      - printf '[{"name":"frontend","imageUri":"%s"}]' "${IMAGE_URI}" > build-artifacts/frontend/imagedefinitions.json
+      - cp deploy/frontend/appspec.yml build-artifacts/frontend/appspec.yml
+      - sed
+        -e "s|__AWS_REGION__|${AWS_REGION}|g"
+        -e "s|__FRONTEND_EXECUTION_ROLE_ARN__|${FRONTEND_EXECUTION_ROLE_ARN}|g"
+        -e "s|__FRONTEND_TASK_ROLE_ARN__|${FRONTEND_TASK_ROLE_ARN}|g"
+        -e "s|__BACKEND_ALB_DNS_NAME__|${BACKEND_ALB_DNS_NAME}|g"
+        deploy/frontend/taskdef.json > build-artifacts/frontend/taskdef.json
+      - echo "Frontend build completed"
+
+artifacts:
+  base-directory: build-artifacts/frontend
+  files:
+    - appspec.yml
+    - taskdef.json
+    - imageDetail.json
+    - imagedefinitions.json
+  discard-paths: yes

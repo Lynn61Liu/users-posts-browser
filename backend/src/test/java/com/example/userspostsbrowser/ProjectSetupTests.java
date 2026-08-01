@@ -50,12 +50,12 @@ class ProjectSetupTests {
 			() -> assertTrue(readme.contains("Copy `.env.example` to `.env`")),
 			() -> assertTrue(readme.contains("Frontend: http://localhost:3000")),
 			() -> assertTrue(readme.contains("Backend: http://localhost:8080")),
-			() -> assertTrue(readme.contains("PostgreSQL: localhost:5432"))
+			() -> assertTrue(readme.contains("DynamoDB table: dce042-users-posts"))
 		);
 	}
 
 	private static void runDockerComposeUp() throws Exception {
-		Process process = new ProcessBuilder("docker", "compose", "up", "-d", "--wait")
+		Process process = new ProcessBuilder("docker", "compose", "up", "-d", "--build", "--remove-orphans", "--wait")
 			.directory(Path.of("..").toFile())
 			.redirectErrorStream(true)
 			.start();

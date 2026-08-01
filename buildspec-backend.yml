@@ -1,0 +1,64 @@
+version: 0.2
+
+env:
+  shell: bash
+  variables:
+    ECR_REPOSITORY_NAME: dce042-backend
+    IMAGE_TAG_PREFIX: backend
+
+phases:
+  install:
+    runtime-versions:
+      java: corretto21
+  pre_build:
+    commands:
+      - set -euo pipefail
+      - AWS_REGION="${AWS_DEFAULT_REGION:-${AWS_REGION:-ap-southeast-2}}"
+      - AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+      - ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+      - REPOSITORY_URI="${ECR_REGISTRY}/${ECR_REPOSITORY_NAME}"
+      - COMMIT_SHA="${CODEBUILD_RESOLVED_SOURCE_VERSION:-local}"
+      - IMAGE_TAG="${IMAGE_TAG_PREFIX}-${COMMIT_SHA:0:12}"
+      - IMAGE_URI="${REPOSITORY_URI}:${IMAGE_TAG}"
+      - BACKEND_EXECUTION_ROLE_ARN="${BACKEND_EXECUTION_ROLE_ARN:-arn:aws:iam::${AWS_ACCOUNT_ID}:role/dce042-ecs-task-execution-role}"
+      - BACKEND_TASK_ROLE_ARN="${BACKEND_TASK_ROLE_ARN:-arn:aws:iam::${AWS_ACCOUNT_ID}:role/dce042-backend-task-role}"
+      - DYNAMODB_TABLE_NAME="${DYNAMODB_TABLE_NAME:-dce042-users-posts}"
+      - echo "Logging in to Amazon ECR ${ECR_REGISTRY}"
+      - aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+      - echo "Running backend tests except local Docker Compose smoke test"
+      - cd backend
+      - chmod +x mvnw
+      - ./mvnw -q -Dtest='!ProjectSetupTests' test
+      - cd ..
+  build:
+    commands:
+      - echo "Building backend Docker image ${IMAGE_URI}"
+      - docker build
+        -f backend/Dockerfile
+        -t "${ECR_REPOSITORY_NAME}:${IMAGE_TAG}"
+        backend
+      - docker tag "${ECR_REPOSITORY_NAME}:${IMAGE_TAG}" "${IMAGE_URI}"
+  post_build:
+    commands:
+      - echo "Pushing backend Docker image ${IMAGE_URI}"
+      - docker push "${IMAGE_URI}"
+      - mkdir -p build-artifacts/backend
+      - printf '{"ImageURI":"%s"}' "${IMAGE_URI}" > build-artifacts/backend/imageDetail.json
+      - printf '[{"name":"backend","imageUri":"%s"}]' "${IMAGE_URI}" > build-artifacts/backend/imagedefinitions.json
+      - cp deploy/backend/appspec.yml build-artifacts/backend/appspec.yml
+      - sed
+        -e "s|__AWS_REGION__|${AWS_REGION}|g"
+        -e "s|__BACKEND_EXECUTION_ROLE_ARN__|${BACKEND_EXECUTION_ROLE_ARN}|g"
+        -e "s|__BACKEND_TASK_ROLE_ARN__|${BACKEND_TASK_ROLE_ARN}|g"
+        -e "s|__DYNAMODB_TABLE_NAME__|${DYNAMODB_TABLE_NAME}|g"
+        deploy/backend/taskdef.json > build-artifacts/backend/taskdef.json
+      - echo "Backend build completed"
+
+artifacts:
+  base-directory: build-artifacts/backend
+  files:
+    - appspec.yml
+    - taskdef.json
+    - imageDetail.json
+    - imagedefinitions.json
+  discard-paths: yes

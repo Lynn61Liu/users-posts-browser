@@ -1,119 +1,117 @@
 package com.example.userspostsbrowser.query;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import com.example.userspostsbrowser.importflow.SyncRepository;
 import com.example.userspostsbrowser.query.dto.UserDetailResponse;
 import com.example.userspostsbrowser.query.dto.UserListItemResponse;
 import com.example.userspostsbrowser.query.dto.UserPostResponse;
+import com.example.userspostsbrowser.transactions.DynamoDbProperties;
+
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 
 @Repository
 class UserQueryRepository {
 
-	private final JdbcTemplate jdbcTemplate;
+	private final DynamoDbClient dynamoDbClient;
+	private final DynamoDbProperties properties;
 
-	UserQueryRepository(JdbcTemplate jdbcTemplate) {
-		this.jdbcTemplate = jdbcTemplate;
+	UserQueryRepository(DynamoDbClient dynamoDbClient, DynamoDbProperties properties) {
+		this.dynamoDbClient = dynamoDbClient;
+		this.properties = properties;
 	}
 
 	List<UserListItemResponse> findAllUsers() {
-		return jdbcTemplate.query("""
-			select id, external_id, name, username, email, company_name
-			from users
-			order by id
-			""",
-			(this::mapUserListItem)
-		);
+		return dynamoDbClient.scan(ScanRequest.builder()
+			.tableName(properties.tableName())
+			.filterExpression("entityType = :entityType")
+			.expressionAttributeValues(Map.of(":entityType", SyncRepository.stringValue("USER")))
+			.build()).items()
+			.stream()
+			.map(this::mapUserListItem)
+			.sorted(Comparator.comparingLong(UserListItemResponse::id))
+			.toList();
 	}
 
 	Optional<UserDetailResponse> findUserById(long userId) {
-		List<UserDetailResponse> results = jdbcTemplate.query("""
-			select id,
-			       external_id,
-			       name,
-			       username,
-			       email,
-			       phone,
-			       website,
-			       address_street,
-			       address_suite,
-			       address_city,
-			       address_zipcode,
-			       address_geo_lat,
-			       address_geo_lng,
-			       company_name,
-			       company_catch_phrase,
-			       company_bs
-			from users
-			where id = ?
-			""",
-			this::mapUserDetail,
-			userId
-		);
-		return results.stream().findFirst();
+		Map<String, AttributeValue> item = dynamoDbClient.getItem(GetItemRequest.builder()
+			.tableName(properties.tableName())
+			.key(SyncRepository.key(SyncRepository.userPk(userId), "PROFILE"))
+			.build()).item();
+		if (item == null || item.isEmpty()) {
+			return Optional.empty();
+		}
+		return Optional.of(mapUserDetail(item));
 	}
 
 	List<UserPostResponse> findPostsByUserId(long userId) {
-		return jdbcTemplate.query("""
-			select id, external_id, title, body
-			from posts
-			where user_id = ?
-			order by id
-			""",
-			this::mapUserPost,
-			userId
-		);
+		return dynamoDbClient.query(QueryRequest.builder()
+			.tableName(properties.tableName())
+			.keyConditionExpression("pk = :pk and begins_with(sk, :postPrefix)")
+			.expressionAttributeValues(Map.of(
+				":pk", SyncRepository.stringValue(SyncRepository.userPk(userId)),
+				":postPrefix", SyncRepository.stringValue("POST#")
+			))
+			.build()).items()
+			.stream()
+			.map(this::mapUserPost)
+			.sorted(Comparator.comparingLong(UserPostResponse::id))
+			.toList();
 	}
 
-	private UserListItemResponse mapUserListItem(ResultSet resultSet, int rowNum) throws SQLException {
+	private UserListItemResponse mapUserListItem(Map<String, AttributeValue> item) {
 		return new UserListItemResponse(
-			resultSet.getLong("id"),
-			resultSet.getLong("external_id"),
-			resultSet.getString("name"),
-			resultSet.getString("username"),
-			resultSet.getString("email"),
-			resultSet.getString("company_name")
+			SyncRepository.number(item, "id"),
+			SyncRepository.number(item, "externalId"),
+			SyncRepository.string(item, "name"),
+			SyncRepository.string(item, "username"),
+			SyncRepository.string(item, "email"),
+			SyncRepository.string(item, "companyName")
 		);
 	}
 
-	private UserDetailResponse mapUserDetail(ResultSet resultSet, int rowNum) throws SQLException {
+	private UserDetailResponse mapUserDetail(Map<String, AttributeValue> item) {
 		return new UserDetailResponse(
-			resultSet.getLong("id"),
-			resultSet.getLong("external_id"),
-			resultSet.getString("name"),
-			resultSet.getString("username"),
-			resultSet.getString("email"),
-			resultSet.getString("phone"),
-			resultSet.getString("website"),
+			SyncRepository.number(item, "id"),
+			SyncRepository.number(item, "externalId"),
+			SyncRepository.string(item, "name"),
+			SyncRepository.string(item, "username"),
+			SyncRepository.string(item, "email"),
+			SyncRepository.string(item, "phone"),
+			SyncRepository.string(item, "website"),
 			new UserDetailResponse.AddressResponse(
-				resultSet.getString("address_street"),
-				resultSet.getString("address_suite"),
-				resultSet.getString("address_city"),
-				resultSet.getString("address_zipcode"),
+				SyncRepository.string(item, "addressStreet"),
+				SyncRepository.string(item, "addressSuite"),
+				SyncRepository.string(item, "addressCity"),
+				SyncRepository.string(item, "addressZipcode"),
 				new UserDetailResponse.GeoResponse(
-					resultSet.getString("address_geo_lat"),
-					resultSet.getString("address_geo_lng")
+					SyncRepository.string(item, "addressGeoLat"),
+					SyncRepository.string(item, "addressGeoLng")
 				)
 			),
 			new UserDetailResponse.CompanyResponse(
-				resultSet.getString("company_name"),
-				resultSet.getString("company_catch_phrase"),
-				resultSet.getString("company_bs")
+				SyncRepository.string(item, "companyName"),
+				SyncRepository.string(item, "companyCatchPhrase"),
+				SyncRepository.string(item, "companyBs")
 			)
 		);
 	}
 
-	private UserPostResponse mapUserPost(ResultSet resultSet, int rowNum) throws SQLException {
+	private UserPostResponse mapUserPost(Map<String, AttributeValue> item) {
 		return new UserPostResponse(
-			resultSet.getLong("id"),
-			resultSet.getLong("external_id"),
-			resultSet.getString("title"),
-			resultSet.getString("body")
+			SyncRepository.number(item, "id"),
+			SyncRepository.number(item, "externalId"),
+			SyncRepository.string(item, "title"),
+			SyncRepository.string(item, "body")
 		);
 	}
 }
