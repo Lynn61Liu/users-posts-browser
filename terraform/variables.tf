@@ -69,3 +69,21 @@ variable "entra_metadata_file" {
   type        = string
   default     = ""
 }
+
+variable "repository_full_name" {
+  description = "GitHub repository full name used by CodePipeline."
+  type        = string
+  default     = "Lynn61Liu/users-posts-browser"
+}
+
+variable "repository_branch" {
+  description = "Git branch used by CodePipeline."
+  type        = string
+  default     = "main"
+}
+
+variable "codeconnection_arn" {
+  description = "AWS CodeConnections GitHub connection ARN used by CodePipeline."
+  type        = string
+  default     = ""
+}

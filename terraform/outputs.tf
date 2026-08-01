@@ -97,3 +97,8 @@ output "autoscaling" {
     cpu_alarms       = module.autoscaling.cloudwatch_alarm_names
   }
 }
+
+output "cicd" {
+  description = "Created CI/CD resources."
+  value       = module.cicd.cicd_resources
+}

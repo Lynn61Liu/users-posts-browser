@@ -1785,42 +1785,111 @@ SNS action:
 
 创建：
 
-- One CodePipeline
+- One CodePipeline:
+  - `dce042-dev-pipeline`
 - Two CodeBuild projects:
-  - `dce042-frontend-build`
-  - `dce042-backend-build`
+  - `dce042-dev-frontend-build`
+  - `dce042-dev-backend-build`
 - Two CodeDeploy applications:
-  - `dce042-frontend-deploy`
-  - `dce042-backend-deploy`
+  - `dce042-dev-frontend-deploy`
+  - `dce042-dev-backend-deploy`
 - Two CodeDeploy deployment groups:
-  - `frontend-service-dg`
-  - `backend-service-dg`
+  - `dce042-dev-frontend-dg`
+  - `dce042-dev-backend-dg`
+- Artifact bucket:
+  - `dce042-dev-pipeline-artifacts-345594568549-ap-southeast-2`
+- GitHub source:
+  - `Lynn61Liu/users-posts-browser`
+  - branch: `main`
 
 > 云端配置：AWS CodePipeline stages
 
 ### 14.2 Pipeline flow
 
 ```text
-Source
+Source: GitHub commit f61b353 / "12-13"
   |
   v
 Parallel Build
-  +--> frontend CodeBuild -> frontend ECR
-  +--> backend CodeBuild -> backend ECR
+  +--> frontend CodeBuild -> frontend ECR image frontend-f61b35361a24
+  +--> backend CodeBuild -> backend ECR image backend-f61b35361a24
   |
   v
 Parallel Deploy
-  +--> frontend CodeDeploy Blue/Green -> frontend ECS service
-  +--> backend CodeDeploy Blue/Green -> backend ECS service
+  +--> frontend CodeDeploy Blue/Green -> frontend ECS service task definition :3
+  +--> backend CodeDeploy Blue/Green -> backend ECS service task definition :3
+```
+
+实际执行结果：
+
+```text
+terraform apply:
+  13 added, 0 changed, 0 destroyed
+
+pipeline execution:
+  d7c43ff6-e7d1-4270-9be1-d968570da089
+
+Source:
+  Succeeded
+  commit: f61b35361a24fb70af8eb329fd990651f5435161
+
+ParallelBuild:
+  BuildFrontend: Succeeded
+  BuildBackend: Succeeded
+
+ParallelBlueGreenDeploy:
+  DeployFrontend: Succeeded
+    deployment id: d-LFMSP6QVJ
+  DeployBackend: Succeeded
+    deployment id: d-V5NDI8QVJ
+
+Final ECS state:
+  frontend-service:
+    desired: 1
+    running: 1
+    primary task definition: dce042-frontend-task:3
+    traffic: 100%
+
+  backend-service:
+    desired: 1
+    running: 1
+    primary task definition: dce042-backend-task:3
+    traffic: 100%
+```
+
+修复记录：
+
+```text
+Issue 1:
+  backend build failed on old GitHub commit because the old Dockerfile used Maven Wrapper during Docker build.
+  Fix: pushed local commit f61b353 to GitHub.
+
+Issue 2:
+  CodeDeployToECS action failed because CodePipeline role lacked ecs:RegisterTaskDefinition.
+  Fix: added ecs:RegisterTaskDefinition and ecs:DescribeTaskDefinition to dce042-dev-codepipeline-role policy.
+```
+
+验证：
+
+```text
+frontend /health:
+  HTTP 200 OK
+
+backend /actuator/health:
+  HTTP 200 OK
+  status: UP
+
+frontend /api/users:
+  returns user JSON from backend/DynamoDB
 ```
 
 > 云端配置：AWS CodePipeline / CodeBuild / CodeDeploy / ECR / ECS / ALB Console
 
 ### 14.3 截图证据
 
-- Pipeline succeeded
-- `dce042-frontend-build` succeeded
-- `dce042-backend-build` succeeded
+- Pipeline `dce042-dev-pipeline` succeeded
+- `dce042-dev-frontend-build` succeeded
+- `dce042-dev-backend-build` succeeded
 - frontend image pushed to `dce042-frontend` ECR
 - backend image pushed to `dce042-backend` ECR
 - frontend CodeDeploy blue/green deployment succeeded
@@ -1828,6 +1897,9 @@ Parallel Deploy
 - `frontend-service` running new task definition revision
 - `backend-service` running new task definition revision
 - frontend and backend ALB target groups healthy
+- CodeDeploy deployment target lifecycle events all succeeded
+- ECS task sets during deployment showed Blue and Green task sets
+- final ECS services show task definitions `dce042-frontend-task:3` and `dce042-backend-task:3`
 
 > 云端配置：Microsoft Entra admin center (Azure) + AWS IAM Console / Terraform
 

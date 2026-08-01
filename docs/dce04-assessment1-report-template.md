@@ -636,15 +636,40 @@ Parallel Deploy
 
 CI/CD resources:
 
-- One CodePipeline
+- One CodePipeline:
+  - `dce042-dev-pipeline`
 - Two CodeBuild projects:
-  - `dce042-frontend-build` using `buildspec-frontend.yml`
-  - `dce042-backend-build` using `buildspec-backend.yml`
+  - `dce042-dev-frontend-build` using `buildspec-frontend.yml`
+  - `dce042-dev-backend-build` using `buildspec-backend.yml`
 - Two CodeDeploy applications or deployment groups:
-  - `dce042-frontend-deploy`
-  - `dce042-backend-deploy`
-- One S3 artifact bucket
-- IAM roles for each service
+  - `dce042-dev-frontend-deploy` / `dce042-dev-frontend-dg`
+  - `dce042-dev-backend-deploy` / `dce042-dev-backend-dg`
+- One S3 artifact bucket:
+  - `dce042-dev-pipeline-artifacts-345594568549-ap-southeast-2`
+- IAM roles for CodeBuild, CodeDeploy, and CodePipeline
+
+Successful execution evidence:
+
+```text
+Pipeline execution: d7c43ff6-e7d1-4270-9be1-d968570da089
+Source commit: f61b35361a24fb70af8eb329fd990651f5435161
+Source stage: Succeeded
+Parallel build stage: Succeeded
+Parallel blue/green deploy stage: Succeeded
+
+Frontend deployment: d-LFMSP6QVJ
+Backend deployment:  d-V5NDI8QVJ
+
+Frontend final task definition: dce042-frontend-task:3
+Backend final task definition:  dce042-backend-task:3
+```
+
+Build outputs:
+
+```text
+Frontend ECR image tag: frontend-f61b35361a24
+Backend ECR image tag:  backend-f61b35361a24
+```
 
 Both CodeBuild projects run in privileged mode so Docker images can be built and pushed to Amazon ECR. Each build outputs `imageDetail.json` for ECS blue/green deployment and `imagedefinitions.json` as a standard ECS deployment fallback.
 
@@ -656,6 +681,8 @@ Deployment artifact files:
 | Backend | `deploy/backend/appspec.yml` | `deploy/backend/taskdef.json` | `imageDetail.json` |
 
 The task definition templates use `<IMAGE1_NAME>` as the container image placeholder. During deployment, CodeDeploy replaces this placeholder with the ECR image URI produced by the matching CodeBuild project.
+
+During implementation, the first backend build failed because the GitHub source branch still pointed to an older Dockerfile. After pushing commit `f61b353`, backend CodeBuild succeeded. The first deploy attempt then failed because the CodePipeline role needed `ecs:RegisterTaskDefinition`; the permission was added and the failed deploy stage was retried successfully.
 
 ### Screenshot Placeholders
 
@@ -674,6 +701,14 @@ The task definition templates use `<IMAGE1_NAME>` as the container image placeho
 **Figure 40: Parallel CodeDeploy stages succeeded**
 
 `[Insert screenshot: both deploy actions succeeded]`
+
+**Figure 40a: CodeDeploy lifecycle events**
+
+`[Insert screenshot: BeforeInstall, Install, AllowTraffic lifecycle events succeeded]`
+
+**Figure 40b: ECS blue/green task sets**
+
+`[Insert screenshot: blue and green task sets during deployment or final primary task set after deployment]`
 
 **Figure 41: CodeBuild logs for frontend image build**
 

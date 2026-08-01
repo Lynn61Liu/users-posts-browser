@@ -107,4 +107,8 @@ resource "aws_lb_listener" "http" {
     Name    = "${local.name_prefix}-${each.key}-http-listener"
     Service = each.key
   })
+
+  lifecycle {
+    ignore_changes = [default_action]
+  }
 }

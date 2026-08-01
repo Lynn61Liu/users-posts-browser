@@ -110,11 +110,27 @@ module "monitoring" {
 module "cicd" {
   source = "./modules/cicd"
 
-  project_name             = var.project_name
-  environment              = var.environment
-  frontend_repository_name = var.frontend_repository_name
-  backend_repository_name  = var.backend_repository_name
-  common_tags              = local.common_tags
+  project_name                = var.project_name
+  environment                 = var.environment
+  aws_region                  = var.aws_region
+  frontend_repository_name    = var.frontend_repository_name
+  backend_repository_name     = var.backend_repository_name
+  artifact_bucket_name        = module.data.storage_resources.artifact_bucket_name
+  artifact_bucket_arn         = module.data.storage_resources.artifact_bucket_arn
+  repository_full_name        = var.repository_full_name
+  repository_branch           = var.repository_branch
+  codeconnection_arn          = var.codeconnection_arn
+  ecr_repository_arns         = module.ecr.repository_arns
+  ecs_cluster_name            = module.ecs.cluster_name
+  ecs_service_names           = module.ecs.service_names
+  ecs_task_execution_role_arn = module.security.iam_role_arns.ecs_task_execution
+  frontend_task_role_arn      = module.security.iam_role_arns.frontend_task
+  backend_task_role_arn       = module.security.iam_role_arns.backend_task
+  backend_alb_dns_name        = module.alb.alb_dns_names.backend
+  dynamodb_table_name         = var.dynamodb_table_name
+  listener_arns               = module.alb.listener_arns
+  target_group_names          = module.alb.target_group_names
+  common_tags                 = local.common_tags
 }
 
 module "entra_federation" {

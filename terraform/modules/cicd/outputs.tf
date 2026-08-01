@@ -1,19 +1,24 @@
 output "module_status" {
-  description = "CI/CD module skeleton status."
-  value       = "ready-for-codebuild-codedeploy-codepipeline"
+  description = "CI/CD module status."
+  value       = "codebuild-codedeploy-codepipeline-ready"
 }
 
-output "planned_cicd_resources" {
-  description = "Planned CI/CD resource names and buildspec paths."
+output "cicd_resources" {
+  description = "Created CI/CD resource names."
   value = {
-    pipeline            = "${local.name_prefix}-pipeline"
-    frontend_build      = "${local.name_prefix}-frontend-build"
-    backend_build       = "${local.name_prefix}-backend-build"
-    frontend_buildspec  = "buildspec-frontend.yml"
-    backend_buildspec   = "buildspec-backend.yml"
-    frontend_ecr        = var.frontend_repository_name
-    backend_ecr         = var.backend_repository_name
-    frontend_codedeploy = "${local.name_prefix}-frontend-deploy"
-    backend_codedeploy  = "${local.name_prefix}-backend-deploy"
+    pipeline_name          = aws_codepipeline.main.name
+    artifact_bucket        = var.artifact_bucket_name
+    source_repository      = var.repository_full_name
+    source_branch          = var.repository_branch
+    frontend_build_project = aws_codebuild_project.service["frontend"].name
+    backend_build_project  = aws_codebuild_project.service["backend"].name
+    frontend_codedeploy = {
+      application      = aws_codedeploy_app.service["frontend"].name
+      deployment_group = aws_codedeploy_deployment_group.service["frontend"].deployment_group_name
+    }
+    backend_codedeploy = {
+      application      = aws_codedeploy_app.service["backend"].name
+      deployment_group = aws_codedeploy_deployment_group.service["backend"].deployment_group_name
+    }
   }
 }

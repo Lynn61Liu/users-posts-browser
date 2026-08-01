@@ -16,3 +16,7 @@ notification_email = ""
 # Fill this after downloading Azure Entra federation metadata.
 # Example: "secrets/entra-federation-metadata.xml"
 entra_metadata_file = ""
+
+repository_full_name = "Lynn61Liu/users-posts-browser"
+repository_branch    = "main"
+codeconnection_arn   = "arn:aws:codeconnections:ap-southeast-2:345594568549:connection/4f579aa9-857e-4de1-a3d7-5e0f1dcd6ed2"

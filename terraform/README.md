@@ -218,3 +218,56 @@ Apply result:
 ```text
 10 added, 0 changed, 0 destroyed
 ```
+
+## CI/CD Resources
+
+Step 14 has created the CI/CD layer:
+
+```text
+Pipeline:
+  dce042-dev-pipeline
+
+Source:
+  GitHub repository: Lynn61Liu/users-posts-browser
+  Branch: main
+  CodeConnection: arn:aws:codeconnections:ap-southeast-2:345594568549:connection/4f579aa9-857e-4de1-a3d7-5e0f1dcd6ed2
+
+CodeBuild:
+  dce042-dev-frontend-build
+  dce042-dev-backend-build
+
+CodeDeploy:
+  dce042-dev-frontend-deploy / dce042-dev-frontend-dg
+  dce042-dev-backend-deploy / dce042-dev-backend-dg
+
+Artifact bucket:
+  dce042-dev-pipeline-artifacts-345594568549-ap-southeast-2
+```
+
+Apply result:
+
+```text
+13 added, 0 changed, 0 destroyed
+```
+
+Successful pipeline execution:
+
+```text
+Execution:
+  d7c43ff6-e7d1-4270-9be1-d968570da089
+
+Source:
+  f61b35361a24fb70af8eb329fd990651f5435161
+
+Build:
+  frontend succeeded
+  backend succeeded
+
+Deploy:
+  frontend deployment d-LFMSP6QVJ succeeded
+  backend deployment d-V5NDI8QVJ succeeded
+
+Final ECS task definitions:
+  dce042-frontend-task:3
+  dce042-backend-task:3
+```
