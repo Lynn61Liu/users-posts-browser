@@ -38,3 +38,20 @@ output "network" {
     nat_gateway_id                   = module.network.nat_gateway_id
   }
 }
+
+output "security" {
+  description = "Created security groups and ECS IAM roles."
+  value = {
+    security_group_ids = module.security.security_group_ids
+    iam_role_arns      = module.security.iam_role_arns
+  }
+}
+
+output "ecr" {
+  description = "Created ECR repositories for frontend and backend images."
+  value = {
+    repository_names = module.ecr.repository_names
+    repository_urls  = module.ecr.repository_urls
+    repository_arns  = module.ecr.repository_arns
+  }
+}

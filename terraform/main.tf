@@ -25,9 +25,11 @@ module "network" {
 module "security" {
   source = "./modules/security"
 
-  project_name = var.project_name
-  environment  = var.environment
-  common_tags  = local.common_tags
+  project_name        = var.project_name
+  environment         = var.environment
+  vpc_id              = module.network.vpc_id
+  dynamodb_table_name = var.dynamodb_table_name
+  common_tags         = local.common_tags
 }
 
 module "ecr" {

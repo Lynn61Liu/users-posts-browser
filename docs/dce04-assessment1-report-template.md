@@ -274,9 +274,31 @@ Network components:
 
 Security design:
 
-- ALB security group allows inbound HTTP/HTTPS from the internet
-- ECS task security group allows inbound traffic only from the ALB security group
+- Frontend ALB security group `dce042-dev-frontend-alb-sg` allows inbound TCP 80 from `0.0.0.0/0`
+- Backend ALB security group `dce042-dev-backend-alb-sg` allows inbound TCP 80 from `0.0.0.0/0`
+- Frontend ECS security group `dce042-dev-frontend-ecs-sg` allows inbound TCP 80 only from the frontend ALB security group
+- Backend ECS security group `dce042-dev-backend-ecs-sg` allows inbound TCP 8080 only from the backend ALB security group
+- ECS task execution role uses `AmazonECSTaskExecutionRolePolicy`
+- Backend ECS task role grants access only to the `dce042-users-posts` DynamoDB table and its indexes
 - IAM roles follow least-privilege principles where practical
+
+Created security resources:
+
+```text
+Frontend ALB SG: sg-0c9187b2d9bd81479
+Frontend ECS SG: sg-014acabc9439e4619
+Backend ALB SG: sg-091d6f99b77c96945
+Backend ECS SG: sg-094e6867126ea148a
+
+ECS task execution role:
+  arn:aws:iam::345594568549:role/dce042-dev-ecs-task-execution-role
+
+Frontend task role:
+  arn:aws:iam::345594568549:role/dce042-dev-frontend-task-role
+
+Backend task role:
+  arn:aws:iam::345594568549:role/dce042-dev-backend-task-role
+```
 
 ### Screenshot Placeholders
 
@@ -300,9 +322,17 @@ Security design:
 
 `[Insert screenshot: ALB SG allowing HTTP/HTTPS]`
 
-**Figure 16: ECS task security group inbound rules**
+**Figure 17: ECS task security group inbound rules**
 
 `[Insert screenshot: ECS SG allowing traffic only from ALB SG]`
+
+**Figure 18: ECS task execution IAM role**
+
+`[Insert screenshot: IAM role dce042-dev-ecs-task-execution-role with AmazonECSTaskExecutionRolePolicy]`
+
+**Figure 19: Backend task role DynamoDB policy**
+
+`[Insert screenshot: IAM inline policy dce042-dev-backend-dynamodb-access]`
 
 ---
 

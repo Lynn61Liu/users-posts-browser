@@ -70,3 +70,20 @@ NAT Gateway: not created
 ```
 
 The NAT Gateway is intentionally disabled in `environments/dev/terraform.tfvars` to avoid ongoing NAT hourly charges for this assessment.
+
+## Security Resources
+
+Step 8.1 has created the security groups and ECS IAM roles:
+
+```text
+Frontend ALB SG: dce042-dev-frontend-alb-sg / sg-0c9187b2d9bd81479
+Frontend ECS SG: dce042-dev-frontend-ecs-sg / sg-014acabc9439e4619
+Backend ALB SG: dce042-dev-backend-alb-sg / sg-091d6f99b77c96945
+Backend ECS SG: dce042-dev-backend-ecs-sg / sg-094e6867126ea148a
+
+ECS task execution role: arn:aws:iam::345594568549:role/dce042-dev-ecs-task-execution-role
+Frontend task role: arn:aws:iam::345594568549:role/dce042-dev-frontend-task-role
+Backend task role: arn:aws:iam::345594568549:role/dce042-dev-backend-task-role
+```
+
+The backend task role grants read/write permissions only to the `dce042-users-posts` DynamoDB table and its indexes.

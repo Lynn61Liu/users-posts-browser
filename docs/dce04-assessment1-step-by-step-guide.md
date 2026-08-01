@@ -1176,14 +1176,51 @@ ecs_task_sg:
   outbound HTTPS / AWS services
 ```
 
+实际已创建四个 security groups：
+
+```text
+Frontend ALB security group:
+  Name: dce042-dev-frontend-alb-sg
+  ID: sg-0c9187b2d9bd81479
+  Inbound: TCP 80 from 0.0.0.0/0
+  Outbound: TCP 80 to dce042-dev-frontend-ecs-sg
+
+Frontend ECS security group:
+  Name: dce042-dev-frontend-ecs-sg
+  ID: sg-014acabc9439e4619
+  Inbound: TCP 80 only from dce042-dev-frontend-alb-sg
+  Outbound: all traffic to 0.0.0.0/0
+
+Backend ALB security group:
+  Name: dce042-dev-backend-alb-sg
+  ID: sg-091d6f99b77c96945
+  Inbound: TCP 80 from 0.0.0.0/0
+  Outbound: TCP 8080 to dce042-dev-backend-ecs-sg
+
+Backend ECS security group:
+  Name: dce042-dev-backend-ecs-sg
+  ID: sg-094e6867126ea148a
+  Inbound: TCP 8080 only from dce042-dev-backend-alb-sg
+  Outbound: all traffic to 0.0.0.0/0
+```
+
+说明：
+
+- ALB security group 对公网开放 HTTP 80，让 browser 或 health checker 可以访问 load balancer。
+- ECS task security group 不对公网开放，只接受来自对应 ALB security group 的流量。
+- Backend ECS 端口是 `8080`，因为 Spring Boot backend 运行在 8080。
+- Frontend ECS 端口是 `80`，因为 frontend container 使用 Nginx。
+- HTTPS/443 暂未开启，因为还没有配置 domain 和 ACM certificate。
+
 > 云端配置：AWS IAM
 
 ### 8.2 IAM Roles
 
 至少需要：
 
-- ECS task execution role
-- ECS task role
+- ECS task execution role：已创建 `dce042-dev-ecs-task-execution-role`
+- Frontend ECS task role：已创建 `dce042-dev-frontend-task-role`
+- Backend ECS task role：已创建 `dce042-dev-backend-task-role`
 - CodeBuild service role
 - CodeDeploy service role
 - CodePipeline service role
@@ -1195,6 +1232,54 @@ ecs_task_sg:
 - CloudWatch logs 只给对应 log groups
 - ECS update/deploy 只给对应 cluster 和 service
 - DynamoDB 只给需要访问的 table
+
+实际已创建的 IAM roles：
+
+```text
+ECS task execution role:
+  Name: dce042-dev-ecs-task-execution-role
+  ARN: arn:aws:iam::345594568549:role/dce042-dev-ecs-task-execution-role
+  Attached policy: AmazonECSTaskExecutionRolePolicy
+  Purpose: ECS agent 用它拉取 ECR image，并把 container logs 写入 CloudWatch Logs。
+
+Frontend task role:
+  Name: dce042-dev-frontend-task-role
+  ARN: arn:aws:iam::345594568549:role/dce042-dev-frontend-task-role
+  Purpose: frontend container 的业务身份。目前 frontend 不直接访问 AWS 服务，所以暂时没有额外业务权限。
+
+Backend task role:
+  Name: dce042-dev-backend-task-role
+  ARN: arn:aws:iam::345594568549:role/dce042-dev-backend-task-role
+  Inline policy: dce042-dev-backend-dynamodb-access
+  Purpose: backend container 的业务身份，用于读写 DynamoDB application table。
+```
+
+Backend DynamoDB 权限范围：
+
+```text
+Allowed table:
+  arn:aws:dynamodb:ap-southeast-2:345594568549:table/dce042-users-posts
+
+Allowed index pattern:
+  arn:aws:dynamodb:ap-southeast-2:345594568549:table/dce042-users-posts/index/*
+
+Allowed actions:
+  BatchGetItem, BatchWriteItem, DeleteItem, DescribeTable,
+  GetItem, PutItem, Query, Scan, UpdateItem
+```
+
+Terraform 执行结果：
+
+```text
+Apply complete! Resources: 17 added, 0 changed, 0 destroyed.
+```
+
+查看输出：
+
+```bash
+cd terraform
+terraform output security
+```
 
 > 云端配置：AWS ECR
 
