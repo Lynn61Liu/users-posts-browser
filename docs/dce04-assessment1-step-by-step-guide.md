@@ -1912,23 +1912,29 @@ frontend /api/users:
 正式实施时按以下顺序完成。第 2.4 节是准备清单，本节是最终配置和验证流程。
 
 1. 确认 Enterprise Application 已创建：
-   - Name: `AWS SAML Federation - DCE042`
+   - Name: `AWS Single-Account Access`
 2. 确认 SAML Basic Configuration：
    - Identifier / Entity ID: `urn:amazon:webservices`
    - Reply URL / ACS URL: `https://signin.aws.amazon.com/saml`
    - Sign on URL: `https://signin.aws.amazon.com/saml`
 3. 确认 Entra groups 已创建并分配到 application：
-   - `DevOpsEngineer`
-   - `ReadOnlyAuditor`
-4. 确认已下载 Federation Metadata XML。
-5. 在 Terraform 中引用 metadata XML 创建 AWS IAM SAML provider。
-6. Terraform 创建 AWS IAM roles 后，回到 Entra SAML claims 中补充 role mapping。
-7. 确认 Conditional Access policy 对 AWS Enterprise Application 要求 MFA。
+   - `myDevOpsEngineer`
+   - `myReadOnlyAuditor`
+4. 已从 Azure 下载 Federation Metadata XML：
+   - Downloads: `/Users/yinliu/Downloads/AWS Single-Account Access.xml`
+   - Terraform ignored copy: `terraform/secrets/entra-federation-metadata.xml`
+5. Terraform 已引用 metadata XML 创建 AWS IAM SAML provider 和 roles。
+6. 下一步：回到 Entra SAML claims 中补充或确认 role mapping。
+7. 当前 tenant 没有 Conditional Access 菜单，因此使用 Security defaults 状态作为 MFA/security evidence。
 
-Role claim 示例：
+本项目实际 Role claim values：
 
 ```text
-arn:aws:iam::<account-id>:role/DevOpsEngineer,arn:aws:iam::<account-id>:saml-provider/<provider-name>
+DevOpsEngineer:
+arn:aws:iam::345594568549:role/dce042-dev-DevOpsEngineer,arn:aws:iam::345594568549:saml-provider/dce042-dev-entra-idp
+
+ReadOnlyAuditor:
+arn:aws:iam::345594568549:role/dce042-dev-ReadOnlyAuditor,arn:aws:iam::345594568549:saml-provider/dce042-dev-entra-idp
 ```
 
 RoleSessionName claim 示例：
@@ -1949,13 +1955,21 @@ Terraform 创建：
 - trust policy 信任 SAML provider
 - role permissions
 
-示例 Terraform 方向：
+实际创建结果：
 
-```hcl
-resource "aws_iam_saml_provider" "entra" {
-  name                   = "entra-dce042"
-  saml_metadata_document = file(var.entra_saml_metadata_file)
-}
+```text
+terraform apply:
+  7 added, 0 changed, 0 destroyed
+
+SAML provider:
+  arn:aws:iam::345594568549:saml-provider/dce042-dev-entra-idp
+
+IAM roles:
+  arn:aws:iam::345594568549:role/dce042-dev-DevOpsEngineer
+  arn:aws:iam::345594568549:role/dce042-dev-ReadOnlyAuditor
+
+Max session duration:
+  3600 seconds
 ```
 
 IAM role trust policy 需要允许 SAML federation：
@@ -1981,18 +1995,65 @@ condition {
 
 建议权限：
 
-- `DevOpsEngineer`：用于演示部署能力，可以绑定受限的 ECS/ECR/CodePipeline/CloudWatch 权限。课程 demo 如时间有限，可使用较宽权限但必须在报告中说明生产环境应最小权限。
-- `ReadOnlyAuditor`：优先使用 AWS managed policy `ReadOnlyAccess`，用于审计和查看资源。
+- `dce042-dev-DevOpsEngineer`：绑定 `PowerUserAccess`、`IAMReadOnlyAccess`，并额外允许 pass 本项目 ECS/CodeBuild/CodeDeploy/CodePipeline 相关 service roles。报告中说明生产环境应进一步收紧到最小权限。
+- `dce042-dev-ReadOnlyAuditor`：绑定 AWS managed policy `ReadOnlyAccess`，用于审计和查看资源。
 
-Terraform outputs 建议输出：
+Terraform output：
 
 ```text
-entra_saml_provider_arn
-devops_engineer_role_arn
-readonly_auditor_role_arn
+cd terraform
+terraform output entra_federation
 ```
 
 这些输出用于回填 Entra SAML role claims。
+
+> 云端配置：Microsoft Entra admin center (Azure)，使用 Terraform output 回填 SAML Role claim
+
+### 15.2.1 Azure Role claim 回填
+
+打开：
+
+```text
+Microsoft Entra admin center
+-> Enterprise applications
+-> AWS Single-Account Access
+-> Single sign-on
+-> Attributes & Claims
+```
+
+你现在看到的 `Role = user.assignedroles` 只有在 Azure application role 已经正确分配时才会有值。为了先完成 assessment demo，可以先使用单一静态 role value 验证 DevOpsEngineer 登录：
+
+```text
+Claim name:
+Role
+
+Claim value:
+arn:aws:iam::345594568549:role/dce042-dev-DevOpsEngineer,arn:aws:iam::345594568549:saml-provider/dce042-dev-entra-idp
+```
+
+如果 Azure UI 要求完整 namespace，则使用：
+
+```text
+Name:
+Role
+
+Namespace:
+https://aws.amazon.com/SAML/Attributes
+```
+
+保留：
+
+```text
+RoleSessionName = user.userprincipalname
+SessionDuration = "3600"
+```
+
+如果要同时演示两个 role，则需要让 `user.assignedroles` 返回以下两个 app role value，并把测试用户分别 assign 到对应 app role：
+
+```text
+arn:aws:iam::345594568549:role/dce042-dev-DevOpsEngineer,arn:aws:iam::345594568549:saml-provider/dce042-dev-entra-idp
+arn:aws:iam::345594568549:role/dce042-dev-ReadOnlyAuditor,arn:aws:iam::345594568549:saml-provider/dce042-dev-entra-idp
+```
 
 > 云端配置：Microsoft Entra My Apps / Azure SSO + AWS Console
 
@@ -2005,18 +2066,19 @@ readonly_auditor_role_arn
 - MFA / Conditional Access policy
 - AWS IAM SAML provider
 - AWS IAM roles
+- AWS role selection 页面显示 `dce042-dev-DevOpsEngineer` / `dce042-dev-ReadOnlyAuditor`
 - 使用 Azure Entra ID 登录 AWS Console 成功
 
 验证步骤：
 
 1. 在 Entra Enterprise Application 页面点击 `Test single sign-on`，或打开用户的 My Apps portal。
 2. 选择 AWS SAML application。
-3. 使用被分配到 `DevOpsEngineer` group 的用户登录。
+3. 使用被分配到 `myDevOpsEngineer` group 或 AWS application 的用户登录。
 4. 完成 MFA challenge。
-5. 如果出现 AWS role 选择页面，选择 `DevOpsEngineer`。
+5. 如果出现 AWS role 选择页面，选择 `dce042-dev-DevOpsEngineer`。
 6. 进入 AWS Console 后，右上角应显示 federated role/session 信息。
 7. 验证该用户可以查看或操作与 role 权限相符的 AWS 资源。
-8. 使用 `ReadOnlyAuditor` 测试用户重复一次，只验证 read-only 访问。
+8. 使用 `dce042-dev-ReadOnlyAuditor` 测试用户重复一次，只验证 read-only 访问。
 
 常见问题排查：
 
@@ -2026,13 +2088,271 @@ readonly_auditor_role_arn
 - 如果提示没有权限，检查 IAM role trust policy 是否允许 `sts:AssumeRoleWithSAML`。
 - 如果没有触发 MFA，检查 Conditional Access policy 是否 targeting 到正确 application 和 group。
 
+实际验证记录：
+
+```text
+AWS IAM SAML provider:
+  arn:aws:iam::345594568549:saml-provider/dce042-dev-entra-idp
+  created: 2026-08-01T22:28:45+00:00
+
+Role assignment in Azure:
+  yin liu -> DevOpsEngineer
+  401User -> ReadOnlyAuditor
+
+AWS role selection:
+  Role selection page appeared successfully.
+  This confirms Azure issued a SAML assertion and AWS accepted the role mapping.
+
+Troubleshooting performed:
+  Initial error:
+    Your request did not include a SAML response.
+
+  Second error:
+    AADSTS750054: SAMLRequest or SAMLResponse must be present.
+
+  Resolution:
+    Removed Sign on URL from Basic SAML Configuration.
+    Started login from My Apps -> AWS Single-Account Access.
+```
+
 > 云端配置：本地工具 + AWS Console + Microsoft Entra admin center (Azure)，按阶段逐步开启
 
-## 16. 推荐执行顺序
+## 16. Implementation Evidence / 最终实施证据
 
-> 云端配置：无，本地准备，不创建云资源
+> 云端配置：AWS Console + Microsoft Entra admin center (Azure) + 本地 Terraform 输出
 
-### Phase 1: 本地准备，不产生云资源费用
+本阶段目标是把前面完成的部署、CI/CD、监控和 SSO 证据整理成报告可用的截图和文字记录。
+
+### 16.1 Terraform 证据
+
+需要截图：
+
+- `terraform init` 成功
+- `terraform validate` 成功
+- `terraform apply` summary
+- `terraform output`
+- `terraform plan` 最终显示 `No changes`
+
+实际最终验证：
+
+```text
+terraform validate:
+  Success! The configuration is valid.
+
+terraform plan:
+  No changes. Your infrastructure matches the configuration.
+```
+
+注意：Terraform backend 当前会显示：
+
+```text
+Warning: Deprecated Parameter
+The parameter "dynamodb_table" is deprecated. Use parameter "use_lockfile" instead.
+```
+
+这是 Terraform backend 参数提示，不影响作业结果。因为本作业需要展示 S3 backend + DynamoDB lock table，所以可以保留并在报告中说明。
+
+### 16.2 应用运行证据
+
+实际健康检查：
+
+```text
+Frontend health:
+  URL: http://dce042-dev-frontend-alb-1302086652.ap-southeast-2.elb.amazonaws.com/health
+  HTTP 200
+  body: ok
+
+Backend health:
+  URL: http://dce042-dev-backend-alb-949147414.ap-southeast-2.elb.amazonaws.com/actuator/health
+  HTTP 200
+  body: {"groups":["liveness","readiness"],"status":"UP"}
+```
+
+ECS 服务最终状态：
+
+```text
+frontend-service:
+  status: ACTIVE
+  desired: 1
+  running: 1
+  task definition: dce042-frontend-task:3
+
+backend-service:
+  status: ACTIVE
+  desired: 1
+  running: 1
+  task definition: dce042-backend-task:3
+```
+
+Target group health：
+
+```text
+frontend green target group:
+  target: 10.42.2.84
+  port: 80
+  health: healthy
+
+backend green target group:
+  target: 10.42.1.144
+  port: 8080
+  health: healthy
+```
+
+### 16.3 CI/CD 证据
+
+实际 pipeline：
+
+```text
+Pipeline:
+  dce042-dev-pipeline
+
+Source:
+  GitHubSource: Succeeded
+  commit: f61b35361a24fb70af8eb329fd990651f5435161
+
+ParallelBuild:
+  BuildFrontend: Succeeded
+  BuildBackend: Succeeded
+
+ParallelBlueGreenDeploy:
+  DeployFrontend: Succeeded
+  deployment id: d-LFMSP6QVJ
+  DeployBackend: Succeeded
+  deployment id: d-V5NDI8QVJ
+```
+
+### 16.4 Azure Entra SSO 证据
+
+实际 SSO 结果：
+
+```text
+Azure users and app roles:
+  yin liu -> DevOpsEngineer
+  401User -> ReadOnlyAuditor
+
+AWS role selection page:
+  displayed successfully
+
+AWS IAM SAML provider:
+  arn:aws:iam::345594568549:saml-provider/dce042-dev-entra-idp
+```
+
+Basic SAML Configuration 最终注意事项：
+
+```text
+Identifier:
+  https://signin.aws.amazon.com/saml
+
+Reply URL:
+  https://signin.aws.amazon.com/saml
+
+Sign on URL:
+  empty
+```
+
+Sign on URL 必须清空，否则 My Apps 会走 SP-initiated flow 并跳到 AWS ACS endpoint，导致：
+
+```text
+Your request did not include a SAML response.
+```
+
+### 16.5 截图清单
+
+提交报告前至少准备这些截图：
+
+- Terraform backend S3 bucket + DynamoDB lock table
+- Terraform apply / output / final No changes
+- VPC + two public subnets
+- Internet Gateway + route table
+- Security groups
+- IAM roles
+- ECR frontend/backend repositories with latest tags
+- ECS cluster + frontend/backend services running
+- Task definitions `dce042-frontend-task:3` and `dce042-backend-task:3`
+- CloudWatch log groups
+- ALB frontend/backend
+- Target groups healthy
+- DynamoDB table `dce042-users-posts`
+- S3 buckets
+- SNS topic
+- CloudWatch alarms and Application Auto Scaling policies
+- CodePipeline successful execution
+- CodeBuild frontend/backend successful logs
+- CodeDeploy frontend/backend successful deployments
+- Azure SAML Basic Configuration
+- Azure Attributes & Claims
+- Azure Users and groups role assignment
+- AWS IAM SAML provider
+- AWS IAM federated roles
+- AWS role selection page
+- AWS Console federated login session
+
+> 云端配置：AWS Console + Microsoft Entra admin center (Azure) + 本地 curl / Terraform 输出
+
+## 17. Validation and Testing / 最终验证
+
+### 17.1 验证矩阵
+
+| 验证项 | 实际结果 | 状态 |
+| --- | --- | --- |
+| Terraform validate | `Success! The configuration is valid.` | Pass |
+| Terraform final plan | `No changes` | Pass |
+| Frontend health | HTTP 200 `ok` | Pass |
+| Backend health | HTTP 200 `status: UP` | Pass |
+| Frontend ECS service | desired 1, running 1, `dce042-frontend-task:3` | Pass |
+| Backend ECS service | desired 1, running 1, `dce042-backend-task:3` | Pass |
+| Frontend target group | `10.42.2.84:80 healthy` | Pass |
+| Backend target group | `10.42.1.144:8080 healthy` | Pass |
+| Frontend ECR image | `frontend-f61b35361a24` | Pass |
+| Backend ECR image | `backend-f61b35361a24` | Pass |
+| DynamoDB table | `dce042-users-posts`, ACTIVE, 220 items | Pass |
+| CloudWatch logs | `/ecs/dce042-frontend`, `/ecs/dce042-backend` | Pass |
+| CloudWatch alarms | 4 CPU alarms exist | Pass |
+| SNS | `dce042-dev-critical-notifications` exists | Pass |
+| CodePipeline | Source / Build / Deploy succeeded | Pass |
+| CodeDeploy | frontend/backend deployments succeeded | Pass |
+| Azure SAML | AWS role selection page appeared | Pass |
+
+### 17.2 验证命令
+
+可用于报告截图或附录：
+
+```bash
+curl http://dce042-dev-frontend-alb-1302086652.ap-southeast-2.elb.amazonaws.com/health
+curl http://dce042-dev-backend-alb-949147414.ap-southeast-2.elb.amazonaws.com/actuator/health
+
+aws ecs describe-services \
+  --cluster dce042-dev-ecs-cluster \
+  --services frontend-service backend-service \
+  --region ap-southeast-2
+
+aws codepipeline get-pipeline-state \
+  --name dce042-dev-pipeline \
+  --region ap-southeast-2
+
+aws dynamodb describe-table \
+  --table-name dce042-users-posts \
+  --region ap-southeast-2
+```
+
+### 17.3 CloudWatch alarm 状态说明
+
+当前 CPU high alarms 是 `OK`，CPU low alarms 可能是 `ALARM`。这不是故障，原因是 assessment 环境空闲时 CPU 很低，低于 20% scale-down threshold。
+
+```text
+frontend-cpu-high: OK
+backend-cpu-high: OK
+frontend-cpu-low: ALARM
+backend-cpu-low: ALARM
+```
+
+因为 autoscaling min capacity 是 `1`，所以即使 low alarm 触发，ECS service 仍保持至少 1 个 running task。
+
+> 云端配置：无，这是原始执行顺序记录；可作为报告 appendix 或自己复盘使用
+
+### 16.6 原始推荐执行顺序
+
+#### Phase 1: 本地准备，不产生云资源费用
 
 1. 阅读作业要求和 rubric。
 2. 确认 AWS/Azure 账号权限。
@@ -2044,18 +2364,14 @@ readonly_auditor_role_arn
 8. 编写 Terraform modules。
 9. 运行 `terraform fmt` 和 `terraform validate`。
 
-> 云端配置：AWS S3 + AWS DynamoDB
-
-### Phase 2: 创建 backend state，低费用
+#### Phase 2: 创建 backend state，低费用
 
 1. 创建 Terraform bootstrap。
 2. `terraform plan`。
 3. `terraform apply` 创建 state bucket 和 lock table。
 4. 截图。
 
-> 云端配置：AWS VPC / ECS / ECR / ALB / IAM / S3 / DynamoDB / SNS / CloudWatch / CI/CD
-
-### Phase 3: 创建核心资源，短时间运行
+#### Phase 3: 创建核心资源，短时间运行
 
 1. `terraform init`。
 2. `terraform plan`。
@@ -2064,9 +2380,7 @@ readonly_auditor_role_arn
 5. `terraform apply`。
 6. 立即截图。
 
-> 云端配置：AWS ECR + ECS + ALB + CodeBuild + CodeDeploy + CodePipeline
-
-### Phase 4: 部署应用
+#### Phase 4: 部署应用
 
 1. 通过 `dce042-frontend-build` build frontend image。
 2. push frontend image 到 `dce042-frontend` ECR。
@@ -2080,18 +2394,14 @@ readonly_auditor_role_arn
 10. Frontend CodeDeploy blue/green 验证一次。
 11. Backend CodeDeploy blue/green 验证一次。
 
-> 云端配置：Microsoft Entra admin center (Azure) + AWS IAM / AWS Console
-
-### Phase 5: Azure SSO 验证
+#### Phase 5: Azure SSO 验证
 
 1. 配置 Entra Enterprise App。
 2. 配置 AWS SAML provider 和 roles。
 3. 用户通过 Azure 登录 AWS。
 4. 截图。
 
-> 云端配置：AWS Console + Terraform，本阶段用于删除云资源避免继续收费
-
-### Phase 6: 收尾和删除资源
+#### Phase 6: 收尾和删除资源
 
 1. 收集所有截图。
 2. 导出 Terraform outputs。
@@ -2117,9 +2427,61 @@ terraform destroy -var-file=environments/dev/terraform.tfvars
    - VPC
 6. 最后删除 bootstrap backend 资源，或保留到最终提交后再删除。
 
+实际 cleanup 结果：
+
+```text
+Main Terraform destroy:
+  Destroy complete! Resources: 84 destroyed.
+
+Bootstrap backend destroy:
+  DynamoDB lock table dce042-terraform-locks deleted.
+  S3 state bucket had versioned objects, so the first delete failed with BucketNotEmpty.
+  All object versions were deleted.
+  Re-ran destroy.
+  Destroy complete! Resources: 1 destroyed.
+```
+
+最终 AWS 验证：
+
+```text
+S3 dce042 buckets:
+  none
+
+DynamoDB dce042 tables:
+  []
+
+ECS dce042 clusters:
+  []
+
+ALB dce042 load balancers:
+  []
+
+ECR dce042 repositories:
+  []
+
+CodePipeline / CodeBuild / CodeDeploy dce042 resources:
+  []
+
+CloudWatch alarms/log groups:
+  []
+
+SNS topics:
+  []
+
+IAM roles / SAML providers:
+  []
+```
+
+注意：
+
+```text
+Remote backend bucket 已删除后，主 terraform 目录再执行 terraform state list 会出现 NoSuchBucket。
+这是最终 cleanup 后的预期结果，不是错误。
+```
+
 > 云端配置：无，报告架构图设计；图中需要体现 AWS、Azure 和本地 Terraform
 
-## 17. 架构图应包含哪些部分
+## 18. 架构图应包含哪些部分
 
 架构图必须包含：
 
@@ -2165,7 +2527,7 @@ Terraform State -> S3 Backend + DynamoDB Lock
 
 > 云端配置：无，报告写作
 
-## 18. 报告写作建议
+## 19. 报告写作建议
 
 每个技术部分都按这个格式写：
 
@@ -2188,49 +2550,48 @@ Reflection:
 
 > 云端配置：AWS Console + Microsoft Entra admin center (Azure) + 本地 Terraform 截图
 
-## 19. 最小完成清单
+## 20. 最小完成清单
 
 提交前确认：
 
-- [ ] Terraform modules 存在且结构清楚
-- [ ] `terraform fmt` 通过
-- [ ] `terraform validate` 通过
-- [ ] `terraform plan` 截图
-- [ ] remote backend 配置截图
-- [ ] local state 或 state migration 证据
-- [ ] VPC + two AZ public subnets 截图
-- [ ] two ALBs 截图
-- [ ] two ECR repositories 截图
-- [ ] two ECS services running 截图
-- [ ] four scaling policies 截图
-- [ ] four CloudWatch alarms 截图
-- [ ] two CodeBuild projects 截图
-- [ ] two CodeDeploy apps/deployments 截图
-- [ ] one CodePipeline successful run 截图
-- [ ] S3 buckets 截图
-- [ ] DynamoDB table 截图
-- [ ] SNS topic 截图
-- [ ] Azure Entra ID SAML config 截图
-- [ ] AWS IAM SAML provider 和 roles 截图
-- [ ] Azure SSO 登录 AWS Console 截图
-- [ ] 架构图
-- [ ] cleanup / destroy 截图
+- [x] Terraform modules 存在且结构清楚
+- [x] `terraform fmt` 通过
+- [x] `terraform validate` 通过
+- [x] `terraform plan` 截图
+- [x] remote backend 配置截图
+- [x] local state 或 state migration 证据
+- [x] VPC + two AZ public subnets 截图
+- [x] two ALBs 截图
+- [x] two ECR repositories 截图
+- [x] two ECS services running 截图
+- [x] four scaling policies 截图
+- [x] four CloudWatch alarms 截图
+- [x] two CodeBuild projects 截图
+- [x] two CodeDeploy apps/deployments 截图
+- [x] one CodePipeline successful run 截图
+- [x] S3 buckets 截图
+- [x] DynamoDB table 截图
+- [x] SNS topic 截图
+- [x] Azure Entra ID SAML config 截图
+- [x] AWS IAM SAML provider 和 roles 截图
+- [x] Azure SSO 登录 AWS Console 截图
+- [x] 架构图
+- [x] cleanup / destroy 截图
 
 > 云端配置：无，下一步本地准备为主
 
-## 20. 下一步建议
+## 21. 下一步建议
 
-方案已经确定为当前 `frontend` + `backend` 两个 ECS 服务，并使用完全 DynamoDB 数据路线。下一步先完成这些本地准备，不创建云资源：
+当前方案已经实施为 `frontend` + `backend` 两个 ECS 服务，并使用完全 DynamoDB 数据路线。基础设施、CI/CD、Blue/Green、Autoscaling、Monitoring、Azure Entra SAML federation 和 cleanup 均已完成主要验证。
 
-1. 使用已准备好的 `terraform/` 项目结构。
-2. 使用已准备好的 `buildspec-frontend.yml`。
-3. 使用已准备好的 `buildspec-backend.yml`。
-4. 使用已准备好的 `deploy/frontend/appspec.yml` 和 `deploy/frontend/taskdef.json`。
-5. 使用已准备好的 `deploy/backend/appspec.yml` 和 `deploy/backend/taskdef.json`。
-6. 在 Terraform / CodeBuild project 中设置 `BACKEND_ALB_DNS_NAME`，使 frontend ECS 环境可以转发 `/api` 到 backend ALB。
-7. 在 Terraform / CodeBuild project 中设置 backend DynamoDB table 和 task role 权限，接入 `dce042-users-posts`。
-8. 本地运行 frontend/backend build，确保两个 Docker image 都能 build 成功。
-9. 从第 6 步开始逐步填充 Terraform modules 的真实 AWS resources，并持续运行 `terraform fmt` / `terraform validate`。
+剩余建议：
+
+1. 把已截图片按报告章节顺序插入 report template。
+2. 确认架构图包含 AWS、Azure、Terraform backend、CI/CD、ECS、DynamoDB、CloudWatch/SNS。
+3. 检查 Challenges and Lessons Learned 是否符合自己的写作语气。
+4. 检查所有截图没有暴露敏感 token、secret 或完整个人隐私信息。
+5. 确认 cleanup 截图已包含主环境 destroy 和 bootstrap backend destroy。
+6. 提交前再次检查 AWS Console Billing / Cost Explorer。
 
 当前项目继续使用：
 

@@ -102,3 +102,14 @@ output "cicd" {
   description = "Created CI/CD resources."
   value       = module.cicd.cicd_resources
 }
+
+output "entra_federation" {
+  description = "Azure Entra ID SAML federation resources and role claim values."
+  value = {
+    status            = module.entra_federation.module_status
+    planned_roles     = module.entra_federation.planned_federated_roles
+    saml_provider_arn = module.entra_federation.saml_provider_arn
+    role_arns         = module.entra_federation.role_arns
+    role_claim_values = module.entra_federation.role_claim_values
+  }
+}

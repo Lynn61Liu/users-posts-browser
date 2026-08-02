@@ -1,5 +1,6 @@
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = var.state_bucket_name
+  bucket        = var.state_bucket_name
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_public_access_block" "terraform_state" {

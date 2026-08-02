@@ -15,7 +15,7 @@ notification_email = ""
 
 # Fill this after downloading Azure Entra federation metadata.
 # Example: "secrets/entra-federation-metadata.xml"
-entra_metadata_file = ""
+entra_metadata_file = "secrets/entra-federation-metadata.xml"
 
 repository_full_name = "Lynn61Liu/users-posts-browser"
 repository_branch    = "main"

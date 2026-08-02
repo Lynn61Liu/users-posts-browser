@@ -271,3 +271,91 @@ Final ECS task definitions:
   dce042-frontend-task:3
   dce042-backend-task:3
 ```
+
+## Azure Entra SAML Federation
+
+Step 15 has created the AWS side of the Microsoft Entra ID SAML federation.
+
+Metadata source:
+
+```text
+Downloaded file:
+  /Users/yinliu/Downloads/AWS Single-Account Access.xml
+
+Terraform local ignored copy:
+  secrets/entra-federation-metadata.xml
+```
+
+Apply result:
+
+```text
+7 added, 0 changed, 0 destroyed
+```
+
+Created resources:
+
+```text
+SAML provider:
+  arn:aws:iam::345594568549:saml-provider/dce042-dev-entra-idp
+
+Federated roles:
+  arn:aws:iam::345594568549:role/dce042-dev-DevOpsEngineer
+  arn:aws:iam::345594568549:role/dce042-dev-ReadOnlyAuditor
+```
+
+Azure Role claim values:
+
+```text
+DevOpsEngineer:
+  arn:aws:iam::345594568549:role/dce042-dev-DevOpsEngineer,arn:aws:iam::345594568549:saml-provider/dce042-dev-entra-idp
+
+ReadOnlyAuditor:
+  arn:aws:iam::345594568549:role/dce042-dev-ReadOnlyAuditor,arn:aws:iam::345594568549:saml-provider/dce042-dev-entra-idp
+```
+
+Validation:
+
+```text
+Azure assignment:
+  yin liu -> DevOpsEngineer
+  401User -> ReadOnlyAuditor
+
+AWS validation:
+  Role selection page appeared after launching AWS Single-Account Access from My Apps.
+```
+
+## Cleanup Result
+
+Final cleanup was completed after screenshots were captured.
+
+```text
+Main Terraform environment:
+  Destroy complete! Resources: 84 destroyed.
+
+Bootstrap backend:
+  Destroy complete! Resources: 1 destroyed.
+
+Deleted:
+  ALBs
+  ECS services, cluster, task definitions in Terraform
+  ECR repositories
+  CodePipeline / CodeBuild / CodeDeploy resources
+  S3 application/artifact/state buckets
+  DynamoDB application table and Terraform lock table
+  CloudWatch alarms and ECS log groups
+  SNS topic
+  IAM roles and SAML provider
+  VPC, subnets, route table, internet gateway, security groups
+```
+
+The versioned Terraform state bucket had to be emptied before deletion:
+
+```bash
+aws s3api list-object-versions \
+  --bucket dce042-terraform-state-345594568549-ap-southeast-2 \
+  --output json \
+  | jq '{Objects: ([.Versions[]? | {Key, VersionId}] + [.DeleteMarkers[]? | {Key, VersionId}]), Quiet: true}' \
+  | aws s3api delete-objects \
+      --bucket dce042-terraform-state-345594568549-ap-southeast-2 \
+      --delete file:///dev/stdin
+```

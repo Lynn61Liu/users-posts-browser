@@ -761,8 +761,8 @@ Identity design:
 
 | Entra Group | AWS IAM Role | Purpose |
 | --- | --- | --- |
-| `DevOpsEngineer` | `DevOpsEngineer` | Deployment and operational access |
-| `ReadOnlyAuditor` | `ReadOnlyAuditor` | Read-only audit access |
+| `myDevOpsEngineer` | `dce042-dev-DevOpsEngineer` | Deployment and operational access |
+| `myReadOnlyAuditor` | `dce042-dev-ReadOnlyAuditor` | Read-only audit access |
 
 SAML configuration:
 
@@ -778,6 +778,30 @@ https://aws.amazon.com/SAML/Attributes/Role
 
 RoleSessionName claim:
 https://aws.amazon.com/SAML/Attributes/RoleSessionName
+```
+
+Terraform-created AWS identity resources:
+
+```text
+SAML provider:
+arn:aws:iam::345594568549:saml-provider/dce042-dev-entra-idp
+
+DevOpsEngineer role:
+arn:aws:iam::345594568549:role/dce042-dev-DevOpsEngineer
+
+ReadOnlyAuditor role:
+arn:aws:iam::345594568549:role/dce042-dev-ReadOnlyAuditor
+
+Terraform apply result:
+7 added, 0 changed, 0 destroyed
+```
+
+Azure Role claim values:
+
+```text
+arn:aws:iam::345594568549:role/dce042-dev-DevOpsEngineer,arn:aws:iam::345594568549:saml-provider/dce042-dev-entra-idp
+
+arn:aws:iam::345594568549:role/dce042-dev-ReadOnlyAuditor,arn:aws:iam::345594568549:saml-provider/dce042-dev-entra-idp
 ```
 
 ### Screenshot Placeholders
@@ -836,11 +860,93 @@ Conditional Access was reviewed during implementation. The current Microsoft Ent
 
 `[Insert screenshot: AWS Console showing federated role session]`
 
+Validation result:
+
+```text
+The Azure Entra My Apps launch successfully reached the AWS role selection page.
+The mapped AWS roles were available for selection:
+
+- dce042-dev-DevOpsEngineer
+- dce042-dev-ReadOnlyAuditor
+
+This confirms that Azure issued the SAML assertion and AWS accepted the IAM role mapping.
+```
+
+Implementation note:
+
+```text
+During testing, direct access to https://signin.aws.amazon.com/saml returned "Your request did not include a SAML response" because that URL is the AWS Assertion Consumer Service endpoint, not a user login page.
+
+Direct access to the Microsoft /saml2 endpoint returned AADSTS750054 because no SAMLRequest was present. The issue was resolved by clearing the Sign on URL in Basic SAML Configuration and starting the login from My Apps.
+```
+
 ---
 
 ## 16. Implementation Evidence
 
 This section records the implementation process in sequence.
+
+Final Terraform validation:
+
+```text
+terraform validate:
+Success! The configuration is valid.
+
+terraform plan:
+No changes. Your infrastructure matches the configuration.
+```
+
+Application runtime validation:
+
+```text
+Frontend health:
+HTTP 200 ok
+
+Backend health:
+HTTP 200 {"groups":["liveness","readiness"],"status":"UP"}
+
+Frontend ECS service:
+ACTIVE, desired 1, running 1, task definition dce042-frontend-task:3
+
+Backend ECS service:
+ACTIVE, desired 1, running 1, task definition dce042-backend-task:3
+```
+
+Target group validation:
+
+```text
+Frontend green target group:
+target 10.42.2.84:80 healthy
+
+Backend green target group:
+target 10.42.1.144:8080 healthy
+```
+
+CI/CD validation:
+
+```text
+CodePipeline:
+dce042-dev-pipeline
+
+Source:
+Succeeded, commit f61b35361a24fb70af8eb329fd990651f5435161
+
+Build:
+BuildFrontend Succeeded
+BuildBackend Succeeded
+
+Deploy:
+DeployFrontend Succeeded, deployment d-LFMSP6QVJ
+DeployBackend Succeeded, deployment d-V5NDI8QVJ
+```
+
+Azure Entra SAML validation:
+
+```text
+yin liu -> DevOpsEngineer
+401User -> ReadOnlyAuditor
+AWS role selection page displayed successfully
+```
 
 ### Screenshot Placeholders
 
@@ -870,20 +976,39 @@ This section records the implementation process in sequence.
 
 Validation confirms that the infrastructure was created correctly and the application is reachable through the load balancers.
 
-Validation checklist:
+Validation matrix:
 
-- Terraform commands completed successfully
-- Both ECR repositories contain images
-- Both ECS services are running
-- ALB target groups are healthy
-- Frontend URL is reachable
-- Backend URL is reachable
-- CodePipeline completed successfully
-- CodeDeploy blue/green deployment completed successfully
-- CloudWatch logs are being written
-- CloudWatch alarms exist
-- SNS topic exists
-- Entra SAML login to AWS works
+| Area | Test | Result | Evidence |
+| --- | --- | --- | --- |
+| Terraform | `terraform validate` | Pass | Configuration valid |
+| Terraform | Final `terraform plan` | Pass | No changes |
+| Frontend | `/health` via frontend ALB | Pass | HTTP 200 `ok` |
+| Backend | `/actuator/health` via backend ALB | Pass | HTTP 200 `status: UP` |
+| ECS | Frontend service running | Pass | Desired 1, running 1, task definition `dce042-frontend-task:3` |
+| ECS | Backend service running | Pass | Desired 1, running 1, task definition `dce042-backend-task:3` |
+| ALB | Frontend target health | Pass | Green target `10.42.2.84:80` healthy |
+| ALB | Backend target health | Pass | Green target `10.42.1.144:8080` healthy |
+| ECR | Frontend image exists | Pass | `frontend-f61b35361a24` |
+| ECR | Backend image exists | Pass | `backend-f61b35361a24` |
+| DynamoDB | Application table active | Pass | `dce042-users-posts`, `ACTIVE`, `PAY_PER_REQUEST`, 220 items |
+| CloudWatch Logs | ECS log groups exist | Pass | `/ecs/dce042-frontend`, `/ecs/dce042-backend`, 7 day retention |
+| CloudWatch Alarms | CPU alarms exist | Pass | Four alarms created |
+| SNS | Notification topic exists | Pass | `dce042-dev-critical-notifications` |
+| CI/CD | CodePipeline execution | Pass | Source, Build, Deploy succeeded |
+| CodeDeploy | Blue/green deployment | Pass | `d-LFMSP6QVJ`, `d-V5NDI8QVJ` succeeded |
+| Identity | Entra SAML role mapping | Pass | AWS role selection page displayed mapped roles |
+
+CloudWatch alarm note:
+
+```text
+The frontend/backend CPU high alarms were OK. The CPU low alarms showed ALARM because the services were idle and CPU usage was below the 20% scale-down threshold. This is expected in a low-traffic assessment environment. Minimum ECS capacity is configured as 1, so the services remain available.
+```
+
+Final validation conclusion:
+
+```text
+The deployed environment passed the required validation checks. The frontend and backend services were reachable through ALB endpoints, ECS services were running, ALB targets were healthy, the CI/CD pipeline completed successfully, and Azure Entra ID SAML federation reached the AWS role selection page.
+```
 
 ### Screenshot Placeholders
 
@@ -903,6 +1028,18 @@ Validation checklist:
 
 `[Insert screenshot: successful CodePipeline execution]`
 
+**Figure 65a: DynamoDB table validation**
+
+`[Insert screenshot: dce042-users-posts ACTIVE table]`
+
+**Figure 65b: CloudWatch alarms validation**
+
+`[Insert screenshot: CloudWatch alarms list]`
+
+**Figure 65c: Azure SAML validation**
+
+`[Insert screenshot: AWS role selection page from Entra My Apps login]`
+
 ---
 
 ## 18. Cost Control and Cleanup
@@ -913,6 +1050,67 @@ Cleanup steps:
 
 ```bash
 terraform destroy -var-file=environments/dev/terraform.tfvars
+```
+
+Actual cleanup result:
+
+```text
+Main Terraform environment:
+  terraform destroy -var-file=environments/dev/terraform.tfvars -auto-approve
+  Destroy complete! Resources: 84 destroyed.
+
+Bootstrap backend:
+  terraform destroy -auto-approve
+  DynamoDB lock table deleted.
+  S3 state bucket initially failed because versioned state objects remained.
+  Deleted all S3 object versions manually.
+  Re-ran terraform destroy.
+  Destroy complete! Resources: 1 destroyed.
+```
+
+Cleanup verification:
+
+```text
+S3 buckets containing dce042 or terraform-state:
+  none
+
+DynamoDB tables containing dce042:
+  []
+
+ECS clusters containing dce042:
+  []
+
+ALBs containing dce042:
+  []
+
+ECR repositories containing dce042:
+  []
+
+CodePipeline pipelines containing dce042:
+  []
+
+CodeBuild projects containing dce042:
+  []
+
+CodeDeploy applications containing dce042:
+  []
+
+CloudWatch alarms/log groups containing dce042:
+  []
+
+SNS topics containing dce042:
+  []
+
+IAM roles and SAML providers containing dce042:
+  []
+```
+
+Note:
+
+```text
+After the backend bucket was deleted, the main Terraform configuration could no longer load the remote state. This is expected after final cleanup because the S3 backend itself was removed.
+
+The AWS Resource Groups Tagging API may temporarily show recently deleted tagged ARNs because its tag index is eventually consistent. Direct service checks confirmed that the active billable resources were deleted.
 ```
 
 Resources checked after cleanup:
@@ -950,9 +1148,11 @@ Resources checked after cleanup:
 
 ### Challenges
 
-- `<Describe challenge 1, such as configuring ECS blue/green deployment>`
-- `<Describe challenge 2, such as SAML role claim mapping>`
-- `<Describe challenge 3, such as controlling AWS costs during testing>`
+- ECS blue/green deployment required careful coordination between ECS services, task definition templates, AppSpec files, ALB listeners, and blue/green target groups. The first deploy attempt also showed that the CodePipeline role needed permission to register ECS task definitions.
+- The backend build initially failed because the GitHub source branch still pointed to an older Dockerfile. After pushing the corrected Dockerfile commit, both CodeBuild projects completed successfully.
+- Azure Entra SAML role mapping required app roles to be assigned correctly. The `Role = user.assignedroles` claim only worked after the AWS role ARN values were added as application roles and users were assigned to those roles.
+- SAML testing produced two misleading errors during configuration. Directly opening the AWS ACS URL returned "Your request did not include a SAML response", and directly opening the Microsoft SAML endpoint returned `AADSTS750054`. The correct flow was to clear the Sign on URL and start login from My Apps.
+- Cleanup required extra handling because the Terraform backend S3 bucket had versioning enabled. The bucket could only be deleted after all object versions were removed.
 
 ### Lessons Learned
 
@@ -961,6 +1161,8 @@ Resources checked after cleanup:
 - Remote Terraform state is important for collaboration and state locking.
 - Blue/green deployment reduces downtime during service updates.
 - SAML federation centralizes identity management and supports MFA enforcement.
+- Final cleanup should include verification from each AWS service console or CLI because tag search results can lag behind direct service state.
+- Cost control should be planned before deployment, especially for ALB, ECS Fargate, CodeBuild, CloudWatch, and NAT Gateway choices.
 
 ---
 
